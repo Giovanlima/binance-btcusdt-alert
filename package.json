@@ -18,6 +18,7 @@
   "author": "Giovanlima",
   "license": "MIT",
   "dependencies": {
+    "chart.js": "^4.5.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "morgan": "^1.10.0"

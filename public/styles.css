@@ -89,6 +89,11 @@ button { padding: 8px 10px; height: 32px; border-radius: var(--radius); border: 
 .log ul { list-style: none; padding: 0; margin: 0; }
 .log li { padding: 6px 8px; margin: 4px 0; border-left: 4px solid transparent; background: #12161f; border-radius: var(--radius); }
 
+/* Chart section */
+.chart-section { background: var(--card); border-radius: var(--radius); padding: 12px; }
+.chart-section h2 { margin: 0 0 10px; font-size: 16px; }
+.chart-container { position: relative; height: 300px; width: 100%; }
+
 /* Responsivo */
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; }
