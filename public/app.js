@@ -1,5 +1,6 @@
-// Dashboard dark + Chart.js + Tooltips + Tendência (regressão linear) com score e tempo gráfico
-// Permite trocar o tipo de gráfico: Linha, Área, Barra
+// Dashboard dark + Chart.js + Tooltips + Tendência (regressão linear) com tempo gráfico
+// Tipos de gráfico: Linha, "Área" (line com fill) e Barra
+// Modo DEMO fallback: se WS falhar, gera preços simulados para não ficar tudo "-".
 
 // --------- UI refs ---------
 const $price = document.getElementById('price');
@@ -66,19 +67,22 @@ let lastMessageAt = null;
 let heartbeatTimer = null;
 
 // Buffers
-let priceBuffer = []; // todos os preços recentes (limitado)
-let timeLabels = [];  // labels para gráfico
+let priceBuffer = [];
+let timeLabels = [];
 const MAX_BUFFER = 400;
 
-// Tendência config (regressão linear)
-let trendCfg = { window: 60, threshold: 0.0002 }; // 0.02% por amostra
+// Tendência config
+let trendCfg = { window: 60, threshold: 0.0002 };
+
+// Demo mode fallback
+let demoMode = false;
+let demoTimer = null;
 
 // --------- Tooltips ---------
 const tooltip = document.createElement('div');
 tooltip.id = 'tooltip';
 tooltip.className = 'tooltip';
 document.body.appendChild(tooltip);
-
 function attachTooltips(root = document) {
   const targets = root.querySelectorAll('[data-tip]');
   targets.forEach(el => {
@@ -89,18 +93,9 @@ function attachTooltips(root = document) {
     el.addEventListener('touchend', hideTip);
   });
 }
-function showTip(el) {
-  const tip = el.getAttribute('data-tip');
-  if (!tip) return;
-  tooltip.innerHTML = tip;
-  tooltip.classList.add('show');
-}
+function showTip(el) { const tip = el.getAttribute('data-tip'); if (!tip) return; tooltip.innerHTML = tip; tooltip.classList.add('show'); }
 function hideTip() { tooltip.classList.remove('show'); }
-function moveTip(e) {
-  const x = (e.clientX || 0), y = (e.clientY || 0);
-  tooltip.style.left = `${x}px`;
-  tooltip.style.top = `${y - 18}px`;
-}
+function moveTip(e) { const x = (e.clientX || 0), y = (e.clientY || 0); tooltip.style.left = `${x}px`; tooltip.style.top = `${y - 18}px`; }
 attachTooltips();
 
 // --------- Utils ---------
@@ -110,32 +105,38 @@ function formatPrice(p){return `$ ${p.toLocaleString('en-US',{minimumFractionDig
 function logEvent(level,msg,tip){ if(!$events) return; const li=document.createElement('li'); li.className=level; li.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; if(tip){li.title=tip;} $events.prepend(li); }
 
 // --------- Chart.js ---------
+function mapChartType(val){
+  const v = (val||'line').toLowerCase();
+  if (v === 'bar') return 'bar';
+  return 'line'; // “area” será “line” com fill
+}
 function initChart(){
   if (!chartCanvas) { logEvent('warn','Canvas do gráfico não encontrado'); return; }
   if (typeof Chart === 'undefined') { logEvent('error','Chart.js não carregado'); return; }
 
   const ctx = chartCanvas.getContext('2d');
-
-  // escolhe cores conforme tipo
   const baseColor = '#22d3ee';
   const bgGradient = ctx.createLinearGradient(0,0,0,200);
   bgGradient.addColorStop(0,'rgba(34, 211, 238, 0.6)');
   bgGradient.addColorStop(1,'rgba(34, 211, 238, 0.05)');
 
-  const type = mapChartType($chartType?.value || 'line');
+  const chosen = $chartType ? $chartType.value : 'line';
+  const type = mapChartType(chosen);
+  const fillEnabled = (chosen.toLowerCase() === 'area');
+
   const dataset = {
     label: 'Preço',
     data: priceBuffer,
     borderColor: baseColor,
-    backgroundColor: type === 'line' ? 'transparent' : bgGradient,
+    backgroundColor: fillEnabled ? bgGradient : 'transparent',
     tension: 0.25,
     borderWidth: 2,
-    fill: type === 'area' ? 'start' : false,
+    fill: fillEnabled ? 'start' : false,
     pointRadius: 0
   };
 
   priceChart = new Chart(ctx, {
-    type: type === 'bar' ? 'bar' : 'line',
+    type: type,
     data: { labels: timeLabels, datasets: [dataset] },
     options: {
       responsive: true,
@@ -146,9 +147,7 @@ function initChart(){
         tooltip: {
           mode: 'index',
           intersect: false,
-          callbacks: {
-            label: (ctx) => `$ ${Number(ctx.parsed.y).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`
-          }
+          callbacks: { label: (ctx) => `$ ${Number(ctx.parsed.y).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` }
         }
       },
       scales: {
@@ -172,29 +171,71 @@ function rebuildChart(){
   if (priceChart) { priceChart.destroy(); priceChart = null; }
   initChart();
 }
-function mapChartType(val){
-  switch((val||'').toLowerCase()){
-    case 'line': return 'line';
-    case 'area': return 'area'; // usaremos line com fill
-    case 'bar': return 'bar';
-    default: return 'line';
-  }
-}
 
 // --------- WebSocket / status ---------
-function setWsStatus(online){ if(!$wsStatus) return; $wsStatus.textContent = online ? 'Online' : 'Offline'; }
-function startHeartbeat(){ stopHeartbeat(); heartbeatTimer=setInterval(()=>{ lastPingAt=Date.now(); setWsStatus(lastMessageAt && Date.now()-lastMessageAt<=10000); updateLatency(); },3000); }
+function setWsStatus(text){ if(!$wsStatus) return; $wsStatus.textContent = text; }
+function startHeartbeat(){ stopHeartbeat(); heartbeatTimer=setInterval(()=>{ lastPingAt=Date.now(); const online = (lastMessageAt && Date.now()-lastMessageAt<=10000); setWsStatus(demoMode ? 'Demo' : (online ? 'Online' : 'Offline')); updateLatency(); },3000); }
 function stopHeartbeat(){ if(heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer=null; } }
 function updateLatency(){ if(!$latency) return; if(!lastPingAt){ $latency.textContent='-'; return; } $latency.textContent = Math.max(0, Date.now()-lastPingAt).toString(); }
 
 function connect(){
+  demoMode = false;
+  clearDemo();
   if(ws) ws.close();
   const url=`wss://stream.binance.com:9443/ws/${symbol}@aggTrade`;
-  ws=new WebSocket(url);
-  ws.onopen=()=>{ setWsStatus(true); logEvent('info',`Conectado ao stream ${symbol}@aggTrade`); startHeartbeat(); };
-  ws.onmessage=(ev)=>{ lastMessageAt=Date.now(); const d=JSON.parse(ev.data); const price=parseFloat(d.p); onPrice(price); updateLatency(); if($lastTick) $lastTick.textContent=new Date(lastMessageAt).toLocaleTimeString(); };
-  ws.onclose=()=>{ setWsStatus(false); logEvent('warn','Conexão encerrada. Reconectando em 3s...'); stopHeartbeat(); setTimeout(connect,3000); };
-  ws.onerror=(err)=>{ setWsStatus(false); logEvent('error',`Erro WS: ${err.message||err}`); };
+  try {
+    ws=new WebSocket(url);
+  } catch (e) {
+    logEvent('error','Falha ao criar WebSocket: '+ e.message);
+    enableDemo('Falha ao criar WebSocket');
+    return;
+  }
+  ws.onopen=()=>{ setWsStatus('Online'); logEvent('info',`Conectado ao stream ${symbol}@aggTrade`); startHeartbeat(); };
+  ws.onmessage=(ev)=>{
+    lastMessageAt=Date.now();
+    const d=JSON.parse(ev.data);
+    const price=parseFloat(d.p);
+    onPrice(price);
+    updateLatency();
+    if($lastTick) $lastTick.textContent=new Date(lastMessageAt).toLocaleTimeString();
+  };
+  ws.onclose=()=>{
+    setWsStatus('Offline');
+    logEvent('warn','Conexão encerrada. Ativando modo demo em 3s…');
+    stopHeartbeat();
+    setTimeout(()=> enableDemo('WS fechado'), 3000);
+  };
+  ws.onerror=(err)=>{
+    setWsStatus('Offline');
+    logEvent('error',`Erro WS: ${err.message||err}`);
+    enableDemo('Erro de WS');
+  };
+}
+
+// --------- Demo mode ---------
+function enableDemo(reason){
+  if (demoMode) return;
+  demoMode = true;
+  setWsStatus('Demo');
+  logEvent('warn', `Modo DEMO ativado (${reason}). Dados simulados serão exibidos.`);
+
+  // Gera preços simulados a cada 1s (seno + ruído)
+  let t = Date.now();
+  let base = lastPrice || 50000;
+  clearDemo();
+  demoTimer = setInterval(()=>{
+    const dt = (Date.now() - t) / 1000;
+    t = Date.now();
+    base = base + Math.sin(Date.now()/5000) * 10 + (Math.random()-0.5)*5;
+    onPrice(base);
+    // último tick
+    if($lastTick) $lastTick.textContent=new Date().toLocaleTimeString();
+    lastMessageAt = Date.now();
+  }, 1000);
+  startHeartbeat();
+}
+function clearDemo(){
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
 }
 
 // --------- Pico / drawdown ---------
@@ -231,26 +272,20 @@ function setPeak(price,origin){
   updatePeakAge();
 }
 function onPrice(price){
-  // Preço atual
   lastPrice = price; if($price) $price.textContent = formatPrice(price);
 
-  // Buffer para análise & gráfico
   pushPrice(price);
   updateChart();
 
-  // reset por janela
   if(Date.now()-lastPeakResetAt > resetMinutes*60*1000){ setPeak(price,'auto'); logEvent('info','Pico resetado por janela'); }
-  // novo topo
   if(peakPrice===null || price>peakPrice){ setPeak(price,'new-top'); }
 
-  // drawdown
   let ddAbs=0, ddSigned=0;
   if(peakPrice){ ddAbs=((peakPrice-price)/peakPrice)*100; ddSigned=((price-peakPrice)/peakPrice)*100; }
   setDrawdownDisplay(ddSigned);
   if(currentPeak) currentPeak.maxDdAbs = Math.max(currentPeak.maxDdAbs||0, ddAbs||0);
   if(ddAbs>=minPct && ddAbs<=maxPct) triggerAlert(price,ddAbs);
 
-  // Tendência (regressão linear)
   computeAndRenderTrend();
 }
 
@@ -267,20 +302,14 @@ function computeLinearSlope(values){
   const n = values.length;
   if (n < 2) return 0;
   let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) {
-    const x = i;
-    const y = values[i];
-    sumX += x; sumY += y; sumXY += x * y; sumXX += x * x;
-  }
+  for (let i = 0; i < n; i++) { const x = i, y = values[i]; sumX += x; sumY += y; sumXY += x * y; sumXX += x * x; }
   const denom = (n * sumXX - sumX * sumX);
   if (denom === 0) return 0;
-  const a = (n * sumXY - sumX * sumY) / denom; // slope
-  return a;
+  return (n * sumXY - sumX * sumY) / denom;
 }
 function computeAndRenderTrend(){
   const N = trendCfg.window;
   $trendWindowInfo.textContent = `Janela: ${N}`;
-  // recorte dos últimos N preços
   const series = priceBuffer.slice(Math.max(0, priceBuffer.length - N));
   if (series.length < 2) {
     $trendLabel.textContent = 'Neutra';
@@ -291,8 +320,8 @@ function computeAndRenderTrend(){
   const slope = computeLinearSlope(series);
   const base = series[0];
   const pctPerSample = base ? (slope / base) : 0;
-
   const thr = trendCfg.threshold;
+
   let label = 'Neutra', cls = '';
   if (pctPerSample > thr) { label = 'Alta ⬆'; cls = 'up'; }
   else if (pctPerSample < -thr) { label = 'Baixa ⬇'; cls = 'down'; }
@@ -401,27 +430,18 @@ $resetPeakBtn.addEventListener('click',resetPeak);
 $muteBtn.addEventListener('click',toggleMute);
 $applyCosts.addEventListener('click',applyCosts);
 
-// Troca tipo de gráfico
-$chartType?.addEventListener('change', () => {
-  rebuildChart();
-});
-
-// Troca janela de tendência (tempo gráfico)
+$chartType?.addEventListener('change', () => { rebuildChart(); });
 $trendWindowSelect?.addEventListener('change', () => {
   const v = parseInt($trendWindowSelect.value, 10);
-  if (!isNaN(v) && v > 10 && v <= MAX_BUFFER) {
-    trendCfg.window = v;
-  }
-  // atualizar janela informativa e tendência
+  if (!isNaN(v) && v > 10 && v <= MAX_BUFFER) trendCfg.window = v;
   computeAndRenderTrend();
-  // ajustar também labels do gráfico para recortar visualmente
   rebuildChart();
 });
 
 // --------- Init ---------
-initChart();     // gráfico defensivo
-applySettings(); // conecta WS
-applyCosts();    // custos padrão
-computeAndRenderTrend();  // estado inicial
+initChart();
+applySettings(); // dispara conexão (ou ativa Demo se falhar)
+applyCosts();
+computeAndRenderTrend();
 updatePeakAge();
 renderPeaks();

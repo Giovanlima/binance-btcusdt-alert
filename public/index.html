@@ -8,7 +8,6 @@
 </head>
 <body>
   <div class="app">
-    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="profile" data-tip="Painel lateral com navegação.">
         <div class="avatar">₿</div>
@@ -17,7 +16,6 @@
           <small class="muted">Crypto Monitor</small>
         </div>
       </div>
-
       <nav class="nav">
         <div class="nav-group">
           <a class="nav-item active" href="#" data-tip="Visão geral do dashboard."><span class="ico">▣</span>Dashboard</a>
@@ -30,13 +28,10 @@
           <a class="nav-item" href="#" data-tip="Contatos e suporte."><span class="ico">✉</span>Contact</a>
         </div>
       </nav>
-
       <button class="btn upgrade" data-tip="Funcionalidades premium (exemplo).">Upgrade</button>
     </aside>
 
-    <!-- Main -->
     <main class="main">
-      <!-- Topbar -->
       <header class="topbar card">
         <div class="title">
           <button class="hamb" aria-label="Menu" data-tip="Menu de navegação.">☰</button>
@@ -51,7 +46,6 @@
         </div>
       </header>
 
-      <!-- Status line -->
       <section class="status-line card">
         <div class="status-item" data-tip="Estado da conexão com a Binance.">
           <span class="label">Conexão</span>
@@ -67,42 +61,24 @@
         </div>
       </section>
 
-      <!-- KPI row -->
       <section class="kpi-row">
         <div class="kpi card kpi-green" data-tip="Preço negociado em tempo real (aggTrade).">
-          <div class="kpi-head">
-            <span class="muted">Preço atual</span>
-          </div>
+          <div class="kpi-head"><span class="muted">Preço atual</span></div>
           <div id="price" class="kpi-val">-</div>
-          <div class="kpi-foot">
-            <span class="chip chip-up">live</span>
-          </div>
+          <div class="kpi-foot"><span class="chip chip-up">live</span></div>
         </div>
-
         <div class="kpi card kpi-blue" data-tip="Maior preço desde o último reset/novo topo.">
-          <div class="kpi-head">
-            <span class="muted">Pico recente</span>
-          </div>
-          <div class="kpi-val">
-            <span id="peak">-</span>
-          </div>
-          <div class="kpi-foot">
-            <span class="muted">há <strong id="peakAge">—</strong></span>
-          </div>
+          <div class="kpi-head"><span class="muted">Pico recente</span></div>
+          <div class="kpi-val"><span id="peak">-</span></div>
+          <div class="kpi-foot"><span class="muted">há <strong id="peakAge">—</strong></span></div>
         </div>
-
         <div class="kpi card kpi-violet" data-tip="Variação com sinal vs. Pico: verde acima, vermelho abaixo.">
-          <div class="kpi-head">
-            <span class="muted">Drawdown</span>
-          </div>
+          <div class="kpi-head"><span class="muted">Drawdown</span></div>
           <div id="drawdown" class="kpi-val">-</div>
-          <div class="kpi-foot">
-            <span class="muted">vs. pico</span>
-          </div>
+          <div class="kpi-foot"><span class="muted">vs. pico</span></div>
         </div>
       </section>
 
-      <!-- Middle: chart + recent activity -->
       <section class="middle">
         <div class="panel card" data-tip="Gráfico dos últimos ticks.">
           <div class="panel-head">
@@ -123,18 +99,13 @@
             </div>
           </div>
           <div class="chart-area">
-            <!-- Canvas do Chart.js -->
             <canvas id="priceChart"></canvas>
           </div>
-          <div class="panel-foot">
-            <span class="muted">Atualiza em tempo real</span>
-          </div>
+          <div class="panel-foot"><span class="muted">Atualiza em tempo real</span></div>
         </div>
 
         <div class="panel card" data-tip="Eventos e atividades recentes.">
-          <div class="panel-head">
-            <h3>Recent Activity</h3>
-          </div>
+          <div class="panel-head"><h3>Recent Activity</h3></div>
           <ul class="activity">
             <li><span class="ico-bullet">⬤</span>Conexão de stream inicializada</li>
             <li><span class="ico-bullet">⬤</span>Alertas exibidos aqui conforme ocorrem</li>
@@ -143,12 +114,9 @@
         </div>
       </section>
 
-      <!-- Controls + trend -->
       <section class="grid-2">
         <div class="card" data-tip="Configuração dos alertas.">
-          <div class="panel-head">
-            <h3>Data input</h3>
-          </div>
+          <div class="panel-head"><h3>Data input</h3></div>
           <div class="form-grid">
             <label data-tip="Mínimo do intervalo de drawdown absoluto para alertar.">Mín (%)<input id="minThreshold" type="number" step="0.1" value="2.5" /></label>
             <label data-tip="Máximo do intervalo de drawdown absoluto para alertar.">Máx (%)<input id="maxThreshold" type="number" step="0.1" value="3" /></label>
@@ -163,9 +131,7 @@
         </div>
 
         <div class="card" data-tip="Tendência por regressão linear dos últimos N preços.">
-          <div class="panel-head">
-            <h3>Tendência</h3>
-          </div>
+          <div class="panel-head"><h3>Tendência</h3></div>
           <div class="trend-block">
             <div class="trend-line">
               <span id="trendLabel" class="trend-label" data-tip="Alta ⬆ quando inclinação > threshold; Baixa ⬇ quando < -threshold; caso contrário Neutra.">Neutra</span>
@@ -176,27 +142,20 @@
         </div>
       </section>
 
-      <!-- Costs + results -->
       <section class="grid-2">
         <div class="card" data-tip="Estimativa de custos por ida e volta.">
-          <div class="panel-head">
-            <h3>Custos</h3>
-          </div>
+          <div class="panel-head"><h3>Custos</h3></div>
           <div class="form-grid">
             <label data-tip="Taxa de compra (maker/taker).">Taxa compra (%)<input id="feeBuy" type="number" step="0.01" value="0.10" /></label>
             <label data-tip="Taxa de venda (maker/taker).">Taxa venda (%)<input id="feeSell" type="number" step="0.01" value="0.10" /></label>
             <label data-tip="Diferença entre bid/ask.">Spread (%)<input id="spread" type="number" step="0.01" value="0.01" /></label>
             <label data-tip="Slippage estimado.">Slippage (%)<input id="slippage" type="number" step="0.01" value="0.05" /></label>
-            <div class="form-actions">
-              <button id="applyCosts" class="btn" data-tip="Aplicar e recalcular breakeven.">Aplicar custos</button>
-            </div>
+            <div class="form-actions"><button id="applyCosts" class="btn" data-tip="Aplicar e recalcular breakeven.">Aplicar custos</button></div>
           </div>
         </div>
 
         <div class="card" data-tip="Resultados calculados a partir dos custos.">
-          <div class="panel-head">
-            <h3>Resultados</h3>
-          </div>
+          <div class="panel-head"><h3>Resultados</h3></div>
           <div class="results">
             <div class="res-row"><span class="muted">Custo total</span><strong id="totalCost">-</strong></div>
             <div class="res-row"><span class="muted">Breakeven</span><strong id="breakeven">-</strong></div>
@@ -205,7 +164,6 @@
         </div>
       </section>
 
-      <!-- Peaks table -->
       <section class="card" data-tip="Somente picos finalizados com duração > 10s são registrados.">
         <div class="panel-head">
           <h3>Picos recentes</h3>
@@ -232,15 +190,13 @@
         <small class="muted">Registra apenas picos finalizados com duração > 10s.</small>
       </section>
 
-      <footer class="footer muted" data-tip="Aviso legal.">
-        Informativo. Não executa ordens.
-      </footer>
+      <footer class="footer muted" data-tip="Aviso legal.">Informativo. Não executa ordens.</footer>
     </main>
   </div>
 
   <audio id="beep" src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" preload="auto"></audio>
 
-  <!-- Chart.js CDN deve vir ANTES do app.js -->
+  <!-- Chart.js CDN ANTES de app.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
