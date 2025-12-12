@@ -30,7 +30,8 @@ npm start
 - `public/`:
   - `index.html`: UI
   - `styles.css`: estilos (usa variáveis CSS)
-  - `app.js`: lógica (WebSocket, drawdown, picos, layout, tooltips, tour)
+  - `app.js`: lógica (WebSocket, drawdown, picos, layout, tooltips, tour, **gráfico**)
+  - `chart.umd.js`: Chart.js (incluído localmente)
 - `env.example`: exemplo de variáveis de ambiente (PORT)
 
 ## Controles principais
@@ -38,6 +39,12 @@ npm start
 - Reset (min): tempo para reset automático do pico
 - Símbolo: par da Binance (ex.: btcusdt)
 - Botões: Aplicar, Resetar Pico, Silenciar
+
+## Gráfico de Preços
+O gráfico mostra os últimos 100 pontos de preço em tempo real:
+- Atualização automática com cada tick do WebSocket
+- Tema escuro integrado ao design
+- **Inicialização defensiva**: Se Chart.js falhar ao carregar, o app continua funcionando normalmente sem o gráfico
 
 ## Seção “Layout”
 No topo, três campos:
@@ -56,6 +63,7 @@ Clique “Aplicar layout” para salvar (localStorage). “Padrão” restaura o
 ## Observações
 - Este sistema é informativo e não executa ordens.
 - Não versionamos `node_modules`; instale dependências com `npm install`.
+- Chart.js está incluído localmente (`public/chart.umd.js`) para garantir funcionamento offline.
 
 ## Licença
 MIT — veja `LICENSE`.
