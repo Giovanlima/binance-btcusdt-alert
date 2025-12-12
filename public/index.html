@@ -3,171 +3,245 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Alerta BTC/USDT - Queda 2.5% a 3%</title>
+  <title>Dashboard | Monitor BTC/USDT</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="header">
-    <div class="header-row">
-      <h1>Monitor BTC/USDT (Binance)</h1>
-      <div class="status">
-        <span id="wsStatus" class="dot offline">Offline</span>
-        <span class="sep">•</span>
-        <span>Latência: <strong id="latency">-</strong> ms</span>
-        <span class="sep">•</span>
-        <span>Último tick: <strong id="lastTick">-</strong></span>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="profile" data-tip="Painel lateral com navegação.">
+        <div class="avatar">₿</div>
+        <div class="who">
+          <span class="hello">Hi, Trader</span>
+          <small class="muted">Crypto Monitor</small>
+        </div>
       </div>
-      <button id="helpTour" class="help-tour">?</button>
-    </div>
-    <p class="subtitle">Alerta quando o drawdown estiver entre 2.5% e 3% a partir do pico recente.</p>
-  </header>
 
-  <!-- SEÇÃO DE LAYOUT (NOVO) -->
-  <section class="controls compact layout-controls">
-    <div class="control-group sm">
-      <label for="inputWidth">Largura dos campos (px)</label>
-      <input id="inputWidth" type="number" step="5" min="90" max="240" value="140" />
-    </div>
-    <div class="control-group sm">
-      <label for="cardWidth">Largura dos cards (px)</label>
-      <input id="cardWidth" type="number" step="10" min="160" max="320" value="220" />
-    </div>
-    <div class="control-group sm">
-      <label for="rightColWidth">Coluna da tabela (px)</label>
-      <input id="rightColWidth" type="number" step="10" min="380" max="800" value="520" />
-    </div>
-    <div class="buttons-row">
-      <button id="applyLayout">Aplicar layout</button>
-      <button id="resetLayout">Padrão</button>
-    </div>
-  </section>
+      <nav class="nav">
+        <div class="nav-group">
+          <a class="nav-item active" href="#" data-tip="Visão geral do dashboard."><span class="ico">▣</span>Dashboard</a>
+          <a class="nav-item" href="#" data-tip="Resumo e atalhos."><span class="ico">☰</span>Overview</a>
+          <a class="nav-item" href="#" data-tip="Estatísticas e relatórios."><span class="ico">⌁</span>Statistics</a>
+          <a class="nav-item" href="#" data-tip="Configurações do sistema."><span class="ico">⚙</span>Settings</a>
+        </div>
+        <div class="nav-sep"></div>
+        <div class="nav-group">
+          <a class="nav-item" href="#" data-tip="Contatos e suporte."><span class="ico">✉</span>Contact</a>
+        </div>
+      </nav>
 
-  <main class="layout">
-    <div class="left">
-      <section class="controls compact">
-        <div class="control-group sm">
-          <label for="minThreshold">Mín (%)</label>
-          <input id="minThreshold" type="number" step="0.1" value="2.5" />
+      <button class="btn upgrade" data-tip="Funcionalidades premium (exemplo).">Upgrade</button>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <!-- Topbar -->
+      <header class="topbar card">
+        <div class="title">
+          <button class="hamb" aria-label="Menu" data-tip="Menu de navegação.">☰</button>
+          <h1>Dashboard</h1>
         </div>
-        <div class="control-group sm">
-          <label for="maxThreshold">Máx (%)</label>
-          <input id="maxThreshold" type="number" step="0.1" value="3" />
+        <div class="search-wrap">
+          <input class="search" type="text" placeholder="Searching" data-tip="Pesquisa (não funcional nesta versão)." />
+          <div class="icons">
+            <span data-tip="Notificações.">🔔</span>
+            <span data-tip="Preferências.">⚙</span>
+          </div>
         </div>
-        <div class="control-group sm">
-          <label for="resetWindow">Reset (min)</label>
-          <input id="resetWindow" type="number" step="1" value="60" />
+      </header>
+
+      <!-- Status line -->
+      <section class="status-line card">
+        <div class="status-item" data-tip="Estado da conexão com a Binance.">
+          <span class="label">Conexão</span>
+          <span id="wsStatus" class="badge">Offline</span>
         </div>
-        <div class="control-group sm">
-          <label for="symbol">Símbolo</label>
-          <input id="symbol" type="text" value="btcusdt" />
+        <div class="status-item" data-tip="Latência estimada da atualização.">
+          <span class="label">Latência</span>
+          <span><strong id="latency">-</strong> ms</span>
         </div>
-        <div class="buttons-row">
-          <button id="apply">Aplicar</button>
-          <button id="resetPeak">Resetar Pico</button>
-          <button id="mute">Silenciar</button>
+        <div class="status-item" data-tip="Horário do último tick recebido.">
+          <span class="label">Último tick</span>
+          <span><strong id="lastTick">-</strong></span>
         </div>
       </section>
 
-      <section class="stats compact">
-        <div class="stat sm">
-          <span class="label">Preço atual</span>
-          <span id="price">-</span>
+      <!-- KPI row -->
+      <section class="kpi-row">
+        <div class="kpi card kpi-green" data-tip="Preço negociado em tempo real (aggTrade).">
+          <div class="kpi-head">
+            <span class="muted">Preço atual</span>
+          </div>
+          <div id="price" class="kpi-val">-</div>
+          <div class="kpi-foot">
+            <span class="chip chip-up">live</span>
+          </div>
         </div>
-        <div class="stat sm">
-          <span class="label">Pico recente</span>
-          <div class="value-with-sub">
+
+        <div class="kpi card kpi-blue" data-tip="Maior preço desde o último reset/novo topo.">
+          <div class="kpi-head">
+            <span class="muted">Pico recente</span>
+          </div>
+          <div class="kpi-val">
             <span id="peak">-</span>
-            <small id="peakAge" class="sub">—</small>
+          </div>
+          <div class="kpi-foot">
+            <span class="muted">há <strong id="peakAge">—</strong></span>
           </div>
         </div>
-        <div class="stat sm">
-          <span class="label">Drawdown (%)</span>
-          <span id="drawdown">-</span>
-        </div>
-        <div class="stat sm">
-          <span class="label">Último alerta</span>
-          <span id="lastAlert">-</span>
-        </div>
-      </section>
 
-      <section class="controls compact">
-        <div class="control-group sm">
-          <label for="feeBuy">Taxa compra (%)</label>
-          <input id="feeBuy" type="number" step="0.01" value="0.10" />
-        </div>
-        <div class="control-group sm">
-          <label for="feeSell">Taxa venda (%)</label>
-          <input id="feeSell" type="number" step="0.01" value="0.10" />
-        </div>
-        <div class="control-group sm">
-          <label for="spread">Spread (%)</label>
-          <input id="spread" type="number" step="0.01" value="0.01" />
-        </div>
-        <div class="control-group sm">
-          <label for="slippage">Slippage (%)</label>
-          <input id="slippage" type="number" step="0.01" value="0.05" />
-        </div>
-        <div class="buttons-row">
-          <button id="applyCosts">Aplicar custos</button>
-        </div>
-      </section>
-
-      <section class="stats compact">
-        <div class="stat sm">
-          <span class="label">Custo total (ida e volta)</span>
-          <span id="totalCost">-</span>
-        </div>
-        <div class="stat sm">
-          <span class="label">Retorno mínimo para empatar</span>
-          <span id="breakeven">-</span>
-        </div>
-        <div class="stat sm">
-          <span class="label">Observação</span>
-          <span id="breakevenNote">Use ordens limit para reduzir slippage.</span>
-        </div>
-      </section>
-    </div>
-
-    <aside class="right">
-      <section class="peaks">
-        <div class="peaks-header">
-          <h2>Picos recentes</h2>
-          <div class="peaks-actions">
-            <button id="exportPeaks">Exportar CSV</button>
-            <button id="savePeaks">Salvar edições</button>
-            <button id="clearPeaks">Limpar</button>
+        <div class="kpi card kpi-violet" data-tip="Variação com sinal vs. Pico: verde acima, vermelho abaixo.">
+          <div class="kpi-head">
+            <span class="muted">Drawdown</span>
+          </div>
+          <div id="drawdown" class="kpi-val">-</div>
+          <div class="kpi-foot">
+            <span class="muted">vs. pico</span>
           </div>
         </div>
-        <div class="table-wrap fixed">
+      </section>
+
+      <!-- Middle: chart + recent activity -->
+      <section class="middle">
+        <div class="panel card" data-tip="Gráfico dos últimos ticks.">
+          <div class="panel-head">
+            <h3>Preço – Últimos ticks</h3>
+            <div class="chart-controls">
+              <label class="muted" data-tip="Tipo de gráfico.">Tipo</label>
+              <select id="chartType" data-tip="Trocar entre Linha, Área e Barra.">
+                <option value="line" selected>Linha</option>
+                <option value="area">Área</option>
+                <option value="bar">Barra</option>
+              </select>
+              <label class="muted" data-tip="Janela de ticks usada no gráfico e tendência.">Tempo gráfico</label>
+              <select id="trendWindow" data-tip="Quantidade de pontos para análise e exibição.">
+                <option value="60" selected>60</option>
+                <option value="120">120</option>
+                <option value="240">240</option>
+              </select>
+            </div>
+          </div>
+          <div class="chart-area">
+            <!-- Canvas do Chart.js -->
+            <canvas id="priceChart"></canvas>
+          </div>
+          <div class="panel-foot">
+            <span class="muted">Atualiza em tempo real</span>
+          </div>
+        </div>
+
+        <div class="panel card" data-tip="Eventos e atividades recentes.">
+          <div class="panel-head">
+            <h3>Recent Activity</h3>
+          </div>
+          <ul class="activity">
+            <li><span class="ico-bullet">⬤</span>Conexão de stream inicializada</li>
+            <li><span class="ico-bullet">⬤</span>Alertas exibidos aqui conforme ocorrem</li>
+          </ul>
+          <ul id="events" class="events"></ul>
+        </div>
+      </section>
+
+      <!-- Controls + trend -->
+      <section class="grid-2">
+        <div class="card" data-tip="Configuração dos alertas.">
+          <div class="panel-head">
+            <h3>Data input</h3>
+          </div>
+          <div class="form-grid">
+            <label data-tip="Mínimo do intervalo de drawdown absoluto para alertar.">Mín (%)<input id="minThreshold" type="number" step="0.1" value="2.5" /></label>
+            <label data-tip="Máximo do intervalo de drawdown absoluto para alertar.">Máx (%)<input id="maxThreshold" type="number" step="0.1" value="3" /></label>
+            <label data-tip="Tempo para reset automático do pico.">Reset (min)<input id="resetWindow" type="number" step="1" value="60" /></label>
+            <label data-tip="Par da Binance (minúsculas).">Símbolo<input id="symbol" type="text" value="btcusdt" /></label>
+            <div class="form-actions">
+              <button id="apply" class="btn" data-tip="Aplicar símbolo e thresholds.">Aplicar</button>
+              <button id="resetPeak" class="btn btn-soft" data-tip="Reset manual do pico para o preço atual.">Resetar Pico</button>
+              <button id="mute" class="btn btn-soft" data-tip="Ativar/desativar som dos alertas.">Silenciar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-tip="Tendência por regressão linear dos últimos N preços.">
+          <div class="panel-head">
+            <h3>Tendência</h3>
+          </div>
+          <div class="trend-block">
+            <div class="trend-line">
+              <span id="trendLabel" class="trend-label" data-tip="Alta ⬆ quando inclinação > threshold; Baixa ⬇ quando < -threshold; caso contrário Neutra.">Neutra</span>
+              <small id="trendScore" class="muted" data-tip="Score = inclinação normalizada em % por amostra.">0.0000</small>
+            </div>
+            <small class="muted" id="trendWindowInfo" data-tip="Tempo gráfico atual (N pontos).">Janela: 60</small>
+          </div>
+        </div>
+      </section>
+
+      <!-- Costs + results -->
+      <section class="grid-2">
+        <div class="card" data-tip="Estimativa de custos por ida e volta.">
+          <div class="panel-head">
+            <h3>Custos</h3>
+          </div>
+          <div class="form-grid">
+            <label data-tip="Taxa de compra (maker/taker).">Taxa compra (%)<input id="feeBuy" type="number" step="0.01" value="0.10" /></label>
+            <label data-tip="Taxa de venda (maker/taker).">Taxa venda (%)<input id="feeSell" type="number" step="0.01" value="0.10" /></label>
+            <label data-tip="Diferença entre bid/ask.">Spread (%)<input id="spread" type="number" step="0.01" value="0.01" /></label>
+            <label data-tip="Slippage estimado.">Slippage (%)<input id="slippage" type="number" step="0.01" value="0.05" /></label>
+            <div class="form-actions">
+              <button id="applyCosts" class="btn" data-tip="Aplicar e recalcular breakeven.">Aplicar custos</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" data-tip="Resultados calculados a partir dos custos.">
+          <div class="panel-head">
+            <h3>Resultados</h3>
+          </div>
+          <div class="results">
+            <div class="res-row"><span class="muted">Custo total</span><strong id="totalCost">-</strong></div>
+            <div class="res-row"><span class="muted">Breakeven</span><strong id="breakeven">-</strong></div>
+            <div class="res-row"><span class="muted">Obs</span><span id="breakevenNote" class="muted" data-tip="Use ordens limit para reduzir slippage.">Use ordens limit para reduzir slippage.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Peaks table -->
+      <section class="card" data-tip="Somente picos finalizados com duração > 10s são registrados.">
+        <div class="panel-head">
+          <h3>Picos recentes</h3>
+          <div class="actions">
+            <button id="exportPeaks" class="btn-soft" data-tip="Exportar histórico em CSV.">Exportar CSV</button>
+            <button id="savePeaks" class="btn-soft" data-tip="Salvar edições na tabela.">Salvar edições</button>
+            <button id="clearPeaks" class="btn-soft" data-tip="Limpar histórico.">Limpar</button>
+          </div>
+        </div>
+        <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
-                <th>Data/Hora</th>
-                <th>Preço</th>
-                <th>Idade</th>
-                <th>DD máx</th>
-                <th>Origem</th>
+                <th data-tip="Horário de registro do pico.">Data/Hora</th>
+                <th data-tip="Preço do pico.">Preço</th>
+                <th data-tip="Tempo total (Duração) do pico.">Duração</th>
+                <th data-tip="Maior drawdown observado desde o pico.">DD máx</th>
+                <th data-tip="Origem do pico (manual/auto/novo topo).">Origem</th>
               </tr>
             </thead>
             <tbody id="peaksBody"></tbody>
           </table>
         </div>
-        <small class="note">Registra picos com idade > 10s. Linhas são editáveis (Data/Hora, Preço, Origem).</small>
+        <small class="muted">Registra apenas picos finalizados com duração > 10s.</small>
       </section>
-    </aside>
-  </main>
 
-  <section class="log">
-    <h2>Eventos</h2>
-    <ul id="events"></ul>
-  </section>
+      <footer class="footer muted" data-tip="Aviso legal.">
+        Informativo. Não executa ordens.
+      </footer>
+    </main>
+  </div>
 
   <audio id="beep" src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" preload="auto"></audio>
 
-  <footer>
-    <small>Este sistema é apenas informativo. Não é recomendação nem executa ordens.</small>
-  </footer>
-
+  <!-- Chart.js CDN deve vir ANTES do app.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
