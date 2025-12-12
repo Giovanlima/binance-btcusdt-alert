@@ -1,16 +1,25 @@
 {
   "name": "binance-btcusdt-alert",
   "version": "1.0.0",
-  "private": true,
-  "description": "Alerta de drawdown 2.5%-3% para BTC/USDT via WebSocket da Binance",
+  "description": "Monitor BTC/USDT (Binance) com alertas de drawdown, UI configurável e tabela de picos.",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
+  "keywords": [
+    "binance",
+    "btc",
+    "usdt",
+    "websocket",
+    "drawdown",
+    "crypto"
+  ],
+  "author": "Giovanlima",
+  "license": "MIT",
   "dependencies": {
-    "dotenv": "^16.4.0",
-    "express": "^4.21.2",
-    "morgan": "^1.10.0",
-    "ws": "^8.18.0"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0"
   }
 }
