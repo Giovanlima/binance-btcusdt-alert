@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Alerta BTC/USDT - Queda 2.5% a 3%</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-row">
+      <h1>Monitor BTC/USDT (Binance)</h1>
+      <div class="status">
+        <span id="wsStatus" class="dot offline">Offline</span>
+        <span class="sep">•</span>
+        <span>Latência: <strong id="latency">-</strong> ms</span>
+        <span class="sep">•</span>
+        <span>Último tick: <strong id="lastTick">-</strong></span>
+      </div>
+      <button id="helpTour" class="help-tour">?</button>
+    </div>
+    <p class="subtitle">Alerta quando o drawdown estiver entre 2.5% e 3% a partir do pico recente.</p>
+  </header>
+
+  <!-- SEÇÃO DE LAYOUT (NOVO) -->
+  <section class="controls compact layout-controls">
+    <div class="control-group sm">
+      <label for="inputWidth">Largura dos campos (px)</label>
+      <input id="inputWidth" type="number" step="5" min="90" max="240" value="140" />
+    </div>
+    <div class="control-group sm">
+      <label for="cardWidth">Largura dos cards (px)</label>
+      <input id="cardWidth" type="number" step="10" min="160" max="320" value="220" />
+    </div>
+    <div class="control-group sm">
+      <label for="rightColWidth">Coluna da tabela (px)</label>
+      <input id="rightColWidth" type="number" step="10" min="380" max="800" value="520" />
+    </div>
+    <div class="buttons-row">
+      <button id="applyLayout">Aplicar layout</button>
+      <button id="resetLayout">Padrão</button>
+    </div>
+  </section>
+
+  <main class="layout">
+    <div class="left">
+      <section class="controls compact">
+        <div class="control-group sm">
+          <label for="minThreshold">Mín (%)</label>
+          <input id="minThreshold" type="number" step="0.1" value="2.5" />
+        </div>
+        <div class="control-group sm">
+          <label for="maxThreshold">Máx (%)</label>
+          <input id="maxThreshold" type="number" step="0.1" value="3" />
+        </div>
+        <div class="control-group sm">
+          <label for="resetWindow">Reset (min)</label>
+          <input id="resetWindow" type="number" step="1" value="60" />
+        </div>
+        <div class="control-group sm">
+          <label for="symbol">Símbolo</label>
+          <input id="symbol" type="text" value="btcusdt" />
+        </div>
+        <div class="buttons-row">
+          <button id="apply">Aplicar</button>
+          <button id="resetPeak">Resetar Pico</button>
+          <button id="mute">Silenciar</button>
+        </div>
+      </section>
+
+      <section class="stats compact">
+        <div class="stat sm">
+          <span class="label">Preço atual</span>
+          <span id="price">-</span>
+        </div>
+        <div class="stat sm">
+          <span class="label">Pico recente</span>
+          <div class="value-with-sub">
+            <span id="peak">-</span>
+            <small id="peakAge" class="sub">—</small>
+          </div>
+        </div>
+        <div class="stat sm">
+          <span class="label">Drawdown (%)</span>
+          <span id="drawdown">-</span>
+        </div>
+        <div class="stat sm">
+          <span class="label">Último alerta</span>
+          <span id="lastAlert">-</span>
+        </div>
+      </section>
+
+      <section class="controls compact">
+        <div class="control-group sm">
+          <label for="feeBuy">Taxa compra (%)</label>
+          <input id="feeBuy" type="number" step="0.01" value="0.10" />
+        </div>
+        <div class="control-group sm">
+          <label for="feeSell">Taxa venda (%)</label>
+          <input id="feeSell" type="number" step="0.01" value="0.10" />
+        </div>
+        <div class="control-group sm">
+          <label for="spread">Spread (%)</label>
+          <input id="spread" type="number" step="0.01" value="0.01" />
+        </div>
+        <div class="control-group sm">
+          <label for="slippage">Slippage (%)</label>
+          <input id="slippage" type="number" step="0.01" value="0.05" />
+        </div>
+        <div class="buttons-row">
+          <button id="applyCosts">Aplicar custos</button>
+        </div>
+      </section>
+
+      <section class="stats compact">
+        <div class="stat sm">
+          <span class="label">Custo total (ida e volta)</span>
+          <span id="totalCost">-</span>
+        </div>
+        <div class="stat sm">
+          <span class="label">Retorno mínimo para empatar</span>
+          <span id="breakeven">-</span>
+        </div>
+        <div class="stat sm">
+          <span class="label">Observação</span>
+          <span id="breakevenNote">Use ordens limit para reduzir slippage.</span>
+        </div>
+      </section>
+    </div>
+
+    <aside class="right">
+      <section class="peaks">
+        <div class="peaks-header">
+          <h2>Picos recentes</h2>
+          <div class="peaks-actions">
+            <button id="exportPeaks">Exportar CSV</button>
+            <button id="savePeaks">Salvar edições</button>
+            <button id="clearPeaks">Limpar</button>
+          </div>
+        </div>
+        <div class="table-wrap fixed">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>Preço</th>
+                <th>Idade</th>
+                <th>DD máx</th>
+                <th>Origem</th>
+              </tr>
+            </thead>
+            <tbody id="peaksBody"></tbody>
+          </table>
+        </div>
+        <small class="note">Registra picos com idade > 10s. Linhas são editáveis (Data/Hora, Preço, Origem).</small>
+      </section>
+    </aside>
+  </main>
+
+  <section class="log">
+    <h2>Eventos</h2>
+    <ul id="events"></ul>
+  </section>
+
+  <audio id="beep" src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" preload="auto"></audio>
+
+  <footer>
+    <small>Este sistema é apenas informativo. Não é recomendação nem executa ordens.</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
