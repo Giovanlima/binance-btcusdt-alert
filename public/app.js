@@ -1,6 +1,7 @@
 // Dashboard dark + Chart.js + Tooltips + Tendência (regressão linear) com tempo gráfico
 // Tipos de gráfico: Linha, "Área" (line com fill) e Barra
-// Modo DEMO fallback: se WS falhar, gera preços simulados para não ficar tudo "-".
+// Fallback: Binance direta -> Proxy local -> Demo
+// Inclui card de Diagnóstico. Checagens defensivas para evitar travamento por elementos ausentes.
 
 // --------- UI refs ---------
 const $price = document.getElementById('price');
@@ -46,6 +47,20 @@ const $chartType = document.getElementById('chartType');
 const $trendWindowSelect = document.getElementById('trendWindow');
 let priceChart = null;
 
+// Peaks table
+const $peaksBody = document.getElementById('peaksBody');
+const $exportPeaks = document.getElementById('exportPeaks');
+const $clearPeaks = document.getElementById('clearPeaks');
+const $savePeaks = document.getElementById('savePeaks');
+
+// Diagnóstico refs
+const $diagEndpoint = document.getElementById('diagEndpoint');
+const $diagState = document.getElementById('diagState');
+const $diagError = document.getElementById('diagError');
+const $diagEvent = document.getElementById('diagEvent');
+const $diagAttempts = document.getElementById('diagAttempts');
+const $diagLastTick = document.getElementById('diagLastTick');
+
 // --------- State ---------
 let ws;
 let symbol = 'btcusdt';
@@ -78,6 +93,16 @@ let trendCfg = { window: 60, threshold: 0.0002 };
 let demoMode = false;
 let demoTimer = null;
 
+// Diagnóstico internal
+let diag = {
+  endpoint: '-',
+  state: 'Offline',
+  lastError: '-',
+  lastEvent: '-',
+  attempts: 0,
+  lastTickText: '-'
+};
+
 // --------- Tooltips ---------
 const tooltip = document.createElement('div');
 tooltip.id = 'tooltip';
@@ -102,13 +127,19 @@ attachTooltips();
 function pad(n){return n.toString().padStart(2,'0')}
 function formatDuration(ms){ const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; if(h>0)return`${pad(h)}h ${pad(m)}m ${pad(sec)}s`; if(m>0)return`${pad(m)}m ${pad(sec)}s`; return`${pad(sec)}s`; }
 function formatPrice(p){return `$ ${p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`}
-function logEvent(level,msg,tip){ if(!$events) return; const li=document.createElement('li'); li.className=level; li.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; if(tip){li.title=tip;} $events.prepend(li); }
+function logEvent(level,msg,tip){ if(!$events) return; const li=document.createElement('li'); li.className=level; li.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; if(tip){li.title=tip;} $events.prepend(li); setDiagEvent(msg); }
+function setDiagState(text){ diag.state = text; $diagState && ($diagState.textContent = text); }
+function setDiagEndpoint(text){ diag.endpoint = text; $diagEndpoint && ($diagEndpoint.textContent = text); }
+function setDiagError(text){ diag.lastError = text; $diagError && ($diagError.textContent = text || '-'); }
+function setDiagEvent(text){ diag.lastEvent = text; $diagEvent && ($diagEvent.textContent = text || '-'); }
+function incDiagAttempts(){ diag.attempts++; $diagAttempts && ($diagAttempts.textContent = String(diag.attempts)); }
+function setDiagLastTick(text){ diag.lastTickText = text; $diagLastTick && ($diagLastTick.textContent = text || '-'); }
 
 // --------- Chart.js ---------
 function mapChartType(val){
   const v = (val||'line').toLowerCase();
   if (v === 'bar') return 'bar';
-  return 'line'; // “area” será “line” com fill
+  return 'line'; // “area” => line com fill
 }
 function initChart(){
   if (!chartCanvas) { logEvent('warn','Canvas do gráfico não encontrado'); return; }
@@ -173,43 +204,115 @@ function rebuildChart(){
 }
 
 // --------- WebSocket / status ---------
-function setWsStatus(text){ if(!$wsStatus) return; $wsStatus.textContent = text; }
-function startHeartbeat(){ stopHeartbeat(); heartbeatTimer=setInterval(()=>{ lastPingAt=Date.now(); const online = (lastMessageAt && Date.now()-lastMessageAt<=10000); setWsStatus(demoMode ? 'Demo' : (online ? 'Online' : 'Offline')); updateLatency(); },3000); }
+function setWsStatus(text){ if($wsStatus) $wsStatus.textContent = text; setDiagState(text); }
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatTimer=setInterval(()=>{
+    lastPingAt=Date.now();
+    const online = (lastMessageAt && Date.now()-lastMessageAt<=10000);
+    const state = demoMode ? 'Demo' : (online ? 'Online' : 'Offline');
+    setWsStatus(state);
+    updateLatency();
+  },3000);
+}
 function stopHeartbeat(){ if(heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer=null; } }
 function updateLatency(){ if(!$latency) return; if(!lastPingAt){ $latency.textContent='-'; return; } $latency.textContent = Math.max(0, Date.now()-lastPingAt).toString(); }
 
-function connect(){
+// Tenta: Binance -> Proxy local -> Demo
+async function connect(){
   demoMode = false;
   clearDemo();
-  if(ws) ws.close();
-  const url=`wss://stream.binance.com:9443/ws/${symbol}@aggTrade`;
-  try {
-    ws=new WebSocket(url);
-  } catch (e) {
-    logEvent('error','Falha ao criar WebSocket: '+ e.message);
-    enableDemo('Falha ao criar WebSocket');
-    return;
+  if(ws) { try{ ws.close(); }catch(_){} ws = null; }
+  diag.attempts = 0; $diagAttempts && ($diagAttempts.textContent = '0');
+
+  const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+  const endpoints = [
+    { url: `wss://stream.binance.com:9443/ws/${symbol}@aggTrade`, label: 'Binance' },
+    { url: `${proto}://${location.host}/ws?symbol=${symbol}&stream=aggTrade`, label: 'Proxy local' },
+  ];
+
+  for (const ep of endpoints) {
+    incDiagAttempts();
+    setDiagEndpoint(ep.label);
+    const ok = await tryEndpoint(ep.url, ep.label);
+    if (ok) return;
   }
-  ws.onopen=()=>{ setWsStatus('Online'); logEvent('info',`Conectado ao stream ${symbol}@aggTrade`); startHeartbeat(); };
-  ws.onmessage=(ev)=>{
-    lastMessageAt=Date.now();
-    const d=JSON.parse(ev.data);
-    const price=parseFloat(d.p);
-    onPrice(price);
-    updateLatency();
-    if($lastTick) $lastTick.textContent=new Date(lastMessageAt).toLocaleTimeString();
-  };
-  ws.onclose=()=>{
-    setWsStatus('Offline');
-    logEvent('warn','Conexão encerrada. Ativando modo demo em 3s…');
-    stopHeartbeat();
-    setTimeout(()=> enableDemo('WS fechado'), 3000);
-  };
-  ws.onerror=(err)=>{
-    setWsStatus('Offline');
-    logEvent('error',`Erro WS: ${err.message||err}`);
-    enableDemo('Erro de WS');
-  };
+  setDiagError('Falha nos endpoints. Ativando Demo.');
+  enableDemo('Nenhum endpoint respondeu em 5s');
+}
+
+function tryEndpoint(url, label){
+  return new Promise((resolve) => {
+    let settled = false;
+    let gotMessage = false;
+    try {
+      ws = new WebSocket(url);
+    } catch (e) {
+      setDiagError(`Criar WS (${label}): ${e.message || e}`);
+      logEvent('error', `Falha ao criar WS (${label}): ${e.message || e}`);
+      return resolve(false);
+    }
+
+    const watchdog = setTimeout(() => {
+      if (!settled && !gotMessage) {
+        settled = true;
+        setDiagError(`Sem dados de ${label} em 5s`);
+        logEvent('warn', `Sem dados de ${label} em 5s. Tentando próximo…`);
+        try { ws.close(); } catch (_) {}
+        resolve(false);
+      }
+    }, 5000);
+
+    ws.onopen = () => {
+      setWsStatus('Online');
+      setDiagEvent(`Conectado via ${label}`);
+      logEvent('info', `Conectado via ${label}`);
+      startHeartbeat();
+    };
+
+    ws.onmessage = (ev) => {
+      lastMessageAt = Date.now();
+      gotMessage = true;
+      try {
+        const data = JSON.parse(ev.data);
+        const price = parseFloat(data.p ?? data.price ?? data.c ?? data);
+        if (!isNaN(price)) onPrice(price);
+      } catch (e) {
+        setDiagError(`Payload inválido (${label}): ${e.message || e}`);
+      }
+      updateLatency();
+      const ts = new Date(lastMessageAt).toLocaleTimeString();
+      if ($lastTick) $lastTick.textContent = ts;
+      setDiagLastTick(ts);
+      if (!settled) {
+        settled = true;
+        clearTimeout(watchdog);
+        resolve(true);
+      }
+    };
+
+    ws.onerror = (err) => {
+      setWsStatus('Offline');
+      const msg = `Erro ${label}: ${err?.message || err}`;
+      setDiagError(msg);
+      logEvent('error', msg);
+      if (!settled) {
+        settled = true;
+        clearTimeout(watchdog);
+        resolve(false);
+      }
+    };
+
+    ws.onclose = () => {
+      setWsStatus('Offline');
+      setDiagEvent(`Fechado (${label})`);
+      if (!settled) {
+        settled = true;
+        clearTimeout(watchdog);
+        resolve(false);
+      }
+    };
+  });
 }
 
 // --------- Demo mode ---------
@@ -217,19 +320,19 @@ function enableDemo(reason){
   if (demoMode) return;
   demoMode = true;
   setWsStatus('Demo');
+  setDiagEvent(`Modo DEMO (${reason})`);
   logEvent('warn', `Modo DEMO ativado (${reason}). Dados simulados serão exibidos.`);
 
-  // Gera preços simulados a cada 1s (seno + ruído)
   let t = Date.now();
   let base = lastPrice || 50000;
   clearDemo();
   demoTimer = setInterval(()=>{
-    const dt = (Date.now() - t) / 1000;
     t = Date.now();
     base = base + Math.sin(Date.now()/5000) * 10 + (Math.random()-0.5)*5;
     onPrice(base);
-    // último tick
-    if($lastTick) $lastTick.textContent=new Date().toLocaleTimeString();
+    const ts = new Date().toLocaleTimeString();
+    if($lastTick) $lastTick.textContent=ts;
+    setDiagLastTick(ts);
     lastMessageAt = Date.now();
   }, 1000);
   startHeartbeat();
@@ -309,12 +412,12 @@ function computeLinearSlope(values){
 }
 function computeAndRenderTrend(){
   const N = trendCfg.window;
-  $trendWindowInfo.textContent = `Janela: ${N}`;
+  if ($trendWindowInfo) $trendWindowInfo.textContent = `Janela: ${N}`;
   const series = priceBuffer.slice(Math.max(0, priceBuffer.length - N));
   if (series.length < 2) {
-    $trendLabel.textContent = 'Neutra';
-    $trendLabel.classList.remove('up','down');
-    $trendScore.textContent = '0.0000';
+    if ($trendLabel) $trendLabel.textContent = 'Neutra';
+    $trendLabel?.classList.remove('up','down');
+    if ($trendScore) $trendScore.textContent = '0.0000';
     return;
   }
   const slope = computeLinearSlope(series);
@@ -326,10 +429,12 @@ function computeAndRenderTrend(){
   if (pctPerSample > thr) { label = 'Alta ⬆'; cls = 'up'; }
   else if (pctPerSample < -thr) { label = 'Baixa ⬇'; cls = 'down'; }
 
-  $trendLabel.textContent = label;
-  $trendLabel.classList.remove('up','down');
-  if (cls) $trendLabel.classList.add(cls);
-  $trendScore.textContent = pctPerSample.toFixed(4);
+  if ($trendLabel) {
+    $trendLabel.textContent = label;
+    $trendLabel.classList.remove('up','down');
+    if (cls) $trendLabel.classList.add(cls);
+  }
+  if ($trendScore) $trendScore.textContent = pctPerSample.toFixed(4);
 }
 
 // --------- Tabela de picos ---------
@@ -377,8 +482,15 @@ $exportPeaks?.addEventListener('click',()=>{
 });
 $clearPeaks?.addEventListener('click',()=>{peaks=[]; renderPeaks(); logEvent('warn','Histórico de picos limpo');});
 $savePeaks?.addEventListener('click',()=>{
+  if(!$peaksBody) return;
   const edits=$peaksBody.querySelectorAll('td.editable'); const updates=new Map(); let ok=true;
-  edits.forEach(td=>{const id=parseInt(td.dataset.id,10); const field=td.dataset.field; const value=td.textContent.trim(); if(!updates.has(id)) updates.set(id,{}); updates.get(id)[field]=value;});
+  edits.forEach(td=>{
+    const id=parseInt(td.dataset.id,10);
+    const field=td.dataset.field;
+    const value=td.textContent.trim();
+    if(!updates.has(id)) updates.set(id,{});
+    updates.get(id)[field]=value;
+  });
   peaks=peaks.map(p=>{
     if(updates.has(p.id)){
       const u=updates.get(p.id); const c={...p};
@@ -394,10 +506,10 @@ $savePeaks?.addEventListener('click',()=>{
 
 // --------- Settings / custos ---------
 function applySettings(){
-  minPct=parseFloat($minThreshold.value);
-  maxPct=parseFloat($maxThreshold.value);
-  resetMinutes=parseInt($resetWindow.value,10);
-  symbol=($symbolInput.value||'btcusdt').toLowerCase();
+  minPct=parseFloat($minThreshold?.value);
+  maxPct=parseFloat($maxThreshold?.value);
+  resetMinutes=parseInt($resetWindow?.value,10);
+  symbol=($symbolInput?.value||'btcusdt').toLowerCase();
 
   if(isNaN(minPct)||isNaN(maxPct)||minPct<=0||maxPct<=0||minPct>maxPct){logEvent('error','Thresholds inválidos'); return;}
   if(!/^[a-z0-9]+$/.test(symbol)){logEvent('error','Símbolo inválido'); return;}
@@ -406,29 +518,29 @@ function applySettings(){
   connect();
 }
 function resetPeak(){ if(lastPrice!=null){ setPeak(lastPrice,'manual'); logEvent('info','Pico resetado manualmente'); } }
-function toggleMute(){ muted=!muted; $muteBtn.textContent = muted ? 'Som ativar' : 'Silenciar'; }
+function toggleMute(){ muted=!muted; if($muteBtn) $muteBtn.textContent = muted ? 'Som ativar' : 'Silenciar'; }
 
 let cost={feeBuy:0.10,feeSell:0.10,spread:0.01,slippage:0.05};
 function applyCosts(){
-  cost.feeBuy=parseFloat($feeBuy.value);
-  cost.feeSell=parseFloat($feeSell.value);
-  cost.spread=parseFloat($spread.value);
-  cost.slippage=parseFloat($slippage.value);
+  cost.feeBuy=parseFloat($feeBuy?.value);
+  cost.feeSell=parseFloat($feeSell?.value);
+  cost.spread=parseFloat($spread?.value);
+  cost.slippage=parseFloat($slippage?.value);
   for(const k of Object.keys(cost)){ if(isNaN(cost[k])||cost[k]<0){logEvent('error',`Valor inválido em ${k}`); return;} }
   const total=cost.feeBuy+cost.feeSell+cost.spread+cost.slippage;
-  $totalCost.textContent=total.toFixed(3)+' %';
-  $breakeven.textContent=total.toFixed(3)+' %';
-  $breakevenNote.textContent='Use ordens limit para reduzir slippage.';
+  if($totalCost) $totalCost.textContent=total.toFixed(3)+' %';
+  if($breakeven) $breakeven.textContent=total.toFixed(3)+' %';
+  if($breakevenNote) $breakevenNote.textContent='Use ordens limit para reduzir slippage.';
   logEvent('info',`Custos: total=${total.toFixed(3)}%`);
 }
 
 // --------- Listeners ---------
 setInterval(()=>{ updatePeakAge(); },1000);
 
-$apply.addEventListener('click',applySettings);
-$resetPeakBtn.addEventListener('click',resetPeak);
-$muteBtn.addEventListener('click',toggleMute);
-$applyCosts.addEventListener('click',applyCosts);
+$apply?.addEventListener('click',applySettings);
+$resetPeakBtn?.addEventListener('click',resetPeak);
+$muteBtn?.addEventListener('click',toggleMute);
+$applyCosts?.addEventListener('click',applyCosts);
 
 $chartType?.addEventListener('change', () => { rebuildChart(); });
 $trendWindowSelect?.addEventListener('change', () => {
@@ -440,8 +552,16 @@ $trendWindowSelect?.addEventListener('change', () => {
 
 // --------- Init ---------
 initChart();
-applySettings(); // dispara conexão (ou ativa Demo se falhar)
+applySettings(); // tenta Binance; se falhar, tenta proxy; senão DEMO
 applyCosts();
 computeAndRenderTrend();
 updatePeakAge();
 renderPeaks();
+
+// Watchdog: se em 5s não chegar nada, garante DEMO
+setTimeout(() => {
+  if (!lastMessageAt && !demoMode) {
+    setDiagError('Sem dados nos primeiros 5s');
+    enableDemo('Sem dados do WS nos primeiros 5s');
+  }
+}, 5000);

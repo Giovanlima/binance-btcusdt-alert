@@ -142,15 +142,17 @@
         </div>
       </section>
 
+      <!-- Diagnóstico -->
       <section class="grid-2">
-        <div class="card" data-tip="Estimativa de custos por ida e volta.">
-          <div class="panel-head"><h3>Custos</h3></div>
-          <div class="form-grid">
-            <label data-tip="Taxa de compra (maker/taker).">Taxa compra (%)<input id="feeBuy" type="number" step="0.01" value="0.10" /></label>
-            <label data-tip="Taxa de venda (maker/taker).">Taxa venda (%)<input id="feeSell" type="number" step="0.01" value="0.10" /></label>
-            <label data-tip="Diferença entre bid/ask.">Spread (%)<input id="spread" type="number" step="0.01" value="0.01" /></label>
-            <label data-tip="Slippage estimado.">Slippage (%)<input id="slippage" type="number" step="0.01" value="0.05" /></label>
-            <div class="form-actions"><button id="applyCosts" class="btn" data-tip="Aplicar e recalcular breakeven.">Aplicar custos</button></div>
+        <div class="card" data-tip="Diagnóstico de conexão e erros.">
+          <div class="panel-head"><h3>Diagnóstico</h3></div>
+          <div class="results">
+            <div class="res-row"><span class="muted">Endpoint</span><strong id="diagEndpoint">-</strong></div>
+            <div class="res-row"><span class="muted">Estado</span><strong id="diagState">Offline</strong></div>
+            <div class="res-row"><span class="muted">Último erro</span><span id="diagError" class="muted">-</span></div>
+            <div class="res-row"><span class="muted">Evento</span><span id="diagEvent" class="muted">-</span></div>
+            <div class="res-row"><span class="muted">Tentativas</span><strong id="diagAttempts">0</strong></div>
+            <div class="res-row"><span class="muted">Último tick</span><strong id="diagLastTick">-</strong></div>
           </div>
         </div>
 
@@ -168,6 +170,7 @@
         <div class="panel-head">
           <h3>Picos recentes</h3>
           <div class="actions">
+            <!-- IDs necessários pelo app.js -->
             <button id="exportPeaks" class="btn-soft" data-tip="Exportar histórico em CSV.">Exportar CSV</button>
             <button id="savePeaks" class="btn-soft" data-tip="Salvar edições na tabela.">Salvar edições</button>
             <button id="clearPeaks" class="btn-soft" data-tip="Limpar histórico.">Limpar</button>
@@ -196,7 +199,7 @@
 
   <audio id="beep" src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" preload="auto"></audio>
 
-  <!-- Chart.js CDN ANTES de app.js -->
+  <!-- Chart.js CDN ANTES do app.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
