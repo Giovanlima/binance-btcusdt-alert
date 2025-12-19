@@ -1,474 +1,55 @@
-// Dashboard dark + Chart.js + Tooltips + Tendência (regressão linear) com tempo gráfico
-// Tipos de gráfico: Linha, "Área" (line com fill) e Barra
-// Fallback: Binance direta -> Proxy local -> Demo
-// Inclui card de Diagnóstico. Checagens defensivas para evitar travamento por elementos ausentes.
+// Ajuste: defaults quando inputs não existem e sempre conecta; remove listeners duplicados
 
-// --------- UI refs ---------
-const $price = document.getElementById('price');
-const $peak = document.getElementById('peak');
-const $peakAge = document.getElementById('peakAge');
-const $drawdown = document.getElementById('drawdown');
-const $lastAlert = document.getElementById('lastAlert');
-const $events = document.getElementById('events');
+// ... [cabeçalhos e refs iguais ao seu arquivo atual] ...
 
-const $minThreshold = document.getElementById('minThreshold');
-const $maxThreshold = document.getElementById('maxThreshold');
-const $resetWindow = document.getElementById('resetWindow');
-const $symbolInput = document.getElementById('symbol');
+// Defaults seguros quando UI não existe
+const DEFAULTS = { minPct: 2.5, maxPct: 3.0, resetMinutes: 60, symbol: 'btcusdt' };
 
-const $apply = document.getElementById('apply');
-const $resetPeakBtn = document.getElementById('resetPeak');
-const $muteBtn = document.getElementById('mute');
+// [funções utilitárias e helpers iguais ao atual]
 
-const beep = document.getElementById('beep');
+// ---- applySettings com fallback e sempre chamando connect()
+function applySettings(){
+  const minVal = Number($minThreshold?.value ?? DEFAULTS.minPct);
+  const maxVal = Number($maxThreshold?.value ?? DEFAULTS.maxPct);
+  const resetVal = parseInt($resetWindow?.value ?? DEFAULTS.resetMinutes, 10);
+  const symVal = ($symbolInput?.value ?? DEFAULTS.symbol).toLowerCase();
 
-const $wsStatus = document.getElementById('wsStatus');
-const $latency = document.getElementById('latency');
-const $lastTick = document.getElementById('lastTick');
+  if (!Number.isFinite(minVal) || !Number.isFinite(maxVal) || minVal<=0 || maxVal<=0 || minVal>maxVal) {
+    logEvent('warn','Thresholds inválidos; usando padrão 2.5%–3.0%');
+    minPct = DEFAULTS.minPct; maxPct = DEFAULTS.maxPct;
+  } else { minPct = minVal; maxPct = maxVal; }
 
-// Costs
-const $feeBuy = document.getElementById('feeBuy');
-const $feeSell = document.getElementById('feeSell');
-const $spread = document.getElementById('spread');
-const $slippage = document.getElementById('slippage');
-const $applyCosts = document.getElementById('applyCosts');
-const $totalCost = document.getElementById('totalCost');
-const $breakeven = document.getElementById('breakeven');
-const $breakevenNote = document.getElementById('breakevenNote');
+  resetMinutes = Number.isFinite(resetVal) ? resetVal : DEFAULTS.resetMinutes;
+  symbol = /^[a-z0-9]+$/.test(symVal) ? symVal : DEFAULTS.symbol;
 
-// Trend (regressão)
-const $trendLabel = document.getElementById('trendLabel');
-const $trendScore = document.getElementById('trendScore');
-const $trendWindowInfo = document.getElementById('trendWindowInfo');
-
-// Chart options
-const chartCanvas = document.getElementById('priceChart');
-const $chartType = document.getElementById('chartType');
-const $trendWindowSelect = document.getElementById('trendWindow');
-let priceChart = null;
-
-// Peaks table
-const $peaksBody = document.getElementById('peaksBody');
-const $exportPeaks = document.getElementById('exportPeaks');
-const $clearPeaks = document.getElementById('clearPeaks');
-const $savePeaks = document.getElementById('savePeaks');
-
-// Diagnóstico refs
-const $diagEndpoint = document.getElementById('diagEndpoint');
-const $diagState = document.getElementById('diagState');
-const $diagError = document.getElementById('diagError');
-const $diagEvent = document.getElementById('diagEvent');
-const $diagAttempts = document.getElementById('diagAttempts');
-const $diagLastTick = document.getElementById('diagLastTick');
-
-// --------- State ---------
-let ws;
-let symbol = 'btcusdt';
-let minPct = 2.5;
-let maxPct = 3.0;
-let resetMinutes = 60;
-let muted = false;
-
-let peakPrice = null;
-let lastPrice = null;
-let lastPeakResetAt = Date.now();
-
-let currentPeak = null; // { ts, price, origin, maxDdAbs }
-let peaks = []; // [{ id, ts, price, origin, maxDdAbs, durationMs, endedAt }]
-let nextPeakId = 1;
-
-let lastPingAt = null;
-let lastMessageAt = null;
-let heartbeatTimer = null;
-
-// Buffers
-let priceBuffer = [];
-let timeLabels = [];
-const MAX_BUFFER = 400;
-
-// Tendência config
-let trendCfg = { window: 60, threshold: 0.0002 };
-
-// Demo mode fallback
-let demoMode = false;
-let demoTimer = null;
-
-// Diagnóstico internal
-let diag = {
-  endpoint: '-',
-  state: 'Offline',
-  lastError: '-',
-  lastEvent: '-',
-  attempts: 0,
-  lastTickText: '-'
-};
-
-// --------- Tooltips ---------
-const tooltip = document.createElement('div');
-tooltip.id = 'tooltip';
-tooltip.className = 'tooltip';
-document.body.appendChild(tooltip);
-function attachTooltips(root = document) {
-  const targets = root.querySelectorAll('[data-tip]');
-  targets.forEach(el => {
-    el.addEventListener('mouseenter', (e) => showTip(e.currentTarget));
-    el.addEventListener('mouseleave', hideTip);
-    el.addEventListener('mousemove', moveTip);
-    el.addEventListener('touchstart', (e) => { showTip(e.currentTarget); moveTip(e.touches[0]); });
-    el.addEventListener('touchend', hideTip);
-  });
-}
-function showTip(el) { const tip = el.getAttribute('data-tip'); if (!tip) return; tooltip.innerHTML = tip; tooltip.classList.add('show'); }
-function hideTip() { tooltip.classList.remove('show'); }
-function moveTip(e) { const x = (e.clientX || 0), y = (e.clientY || 0); tooltip.style.left = `${x}px`; tooltip.style.top = `${y - 18}px`; }
-attachTooltips();
-
-// --------- Utils ---------
-function pad(n){return n.toString().padStart(2,'0')}
-function formatDuration(ms){ const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60; if(h>0)return`${pad(h)}h ${pad(m)}m ${pad(sec)}s`; if(m>0)return`${pad(m)}m ${pad(sec)}s`; return`${pad(sec)}s`; }
-function formatPrice(p){return `$ ${p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`}
-function logEvent(level,msg,tip){ if(!$events) return; const li=document.createElement('li'); li.className=level; li.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; if(tip){li.title=tip;} $events.prepend(li); setDiagEvent(msg); }
-function setDiagState(text){ diag.state = text; $diagState && ($diagState.textContent = text); }
-function setDiagEndpoint(text){ diag.endpoint = text; $diagEndpoint && ($diagEndpoint.textContent = text); }
-function setDiagError(text){ diag.lastError = text; $diagError && ($diagError.textContent = text || '-'); }
-function setDiagEvent(text){ diag.lastEvent = text; $diagEvent && ($diagEvent.textContent = text || '-'); }
-function incDiagAttempts(){ diag.attempts++; $diagAttempts && ($diagAttempts.textContent = String(diag.attempts)); }
-function setDiagLastTick(text){ diag.lastTickText = text; $diagLastTick && ($diagLastTick.textContent = text || '-'); }
-
-// --------- Chart.js ---------
-function mapChartType(val){
-  const v = (val||'line').toLowerCase();
-  if (v === 'bar') return 'bar';
-  return 'line'; // “area” => line com fill
-}
-function initChart(){
-  if (!chartCanvas) { logEvent('warn','Canvas do gráfico não encontrado'); return; }
-  if (typeof Chart === 'undefined') { logEvent('error','Chart.js não carregado'); return; }
-
-  const ctx = chartCanvas.getContext('2d');
-  const baseColor = '#22d3ee';
-  const bgGradient = ctx.createLinearGradient(0,0,0,200);
-  bgGradient.addColorStop(0,'rgba(34, 211, 238, 0.6)');
-  bgGradient.addColorStop(1,'rgba(34, 211, 238, 0.05)');
-
-  const chosen = $chartType ? $chartType.value : 'line';
-  const type = mapChartType(chosen);
-  const fillEnabled = (chosen.toLowerCase() === 'area');
-
-  const dataset = {
-    label: 'Preço',
-    data: priceBuffer,
-    borderColor: baseColor,
-    backgroundColor: fillEnabled ? bgGradient : 'transparent',
-    tension: 0.25,
-    borderWidth: 2,
-    fill: fillEnabled ? 'start' : false,
-    pointRadius: 0
-  };
-
-  priceChart = new Chart(ctx, {
-    type: type,
-    data: { labels: timeLabels, datasets: [dataset] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          callbacks: { label: (ctx) => `$ ${Number(ctx.parsed.y).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` }
-        }
-      },
-      scales: {
-        x: { ticks: { display: false }, grid: { display: false } },
-        y: {
-          ticks: { color: '#9fb0c9', callback: (v)=>`$ ${Number(v).toLocaleString('en-US',{maximumFractionDigits:0})}` },
-          grid: { color: 'rgba(31,45,65,0.3)' }
-        }
-      }
-    }
-  });
-}
-function updateChart(){
-  if (!priceChart) return;
-  priceChart.data.labels = timeLabels;
-  priceChart.data.datasets[0].data = priceBuffer;
-  try { priceChart.update(); } catch(e) { console.error(e); }
-}
-function rebuildChart(){
-  if (!chartCanvas || typeof Chart === 'undefined') return;
-  if (priceChart) { priceChart.destroy(); priceChart = null; }
-  initChart();
+  logEvent('info',`Aplicado: ${symbol}, min=${minPct}%, max=${maxPct}%, reset=${resetMinutes}min`);
+  connect();
 }
 
-// --------- WebSocket / status ---------
-function setWsStatus(text){ if($wsStatus) $wsStatus.textContent = text; setDiagState(text); }
-function startHeartbeat(){
-  stopHeartbeat();
-  heartbeatTimer=setInterval(()=>{
-    lastPingAt=Date.now();
-    const online = (lastMessageAt && Date.now()-lastMessageAt<=10000);
-    const state = demoMode ? 'Demo' : (online ? 'Online' : 'Offline');
-    setWsStatus(state);
-    updateLatency();
-  },3000);
-}
-function stopHeartbeat(){ if(heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer=null; } }
-function updateLatency(){ if(!$latency) return; if(!lastPingAt){ $latency.textContent='-'; return; } $latency.textContent = Math.max(0, Date.now()-lastPingAt).toString(); }
-
-// Tenta: Binance -> Proxy local -> Demo
-async function connect(){
-  demoMode = false;
-  clearDemo();
-  if(ws) { try{ ws.close(); }catch(_){} ws = null; }
-  diag.attempts = 0; $diagAttempts && ($diagAttempts.textContent = '0');
-
-  const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
-  const endpoints = [
-    { url: `wss://stream.binance.com:9443/ws/${symbol}@aggTrade`, label: 'Binance' },
-    { url: `${proto}://${location.host}/ws?symbol=${symbol}&stream=aggTrade`, label: 'Proxy local' },
-  ];
-
-  for (const ep of endpoints) {
-    incDiagAttempts();
-    setDiagEndpoint(ep.label);
-    const ok = await tryEndpoint(ep.url, ep.label);
-    if (ok) return;
-  }
-  setDiagError('Falha nos endpoints. Ativando Demo.');
-  enableDemo('Nenhum endpoint respondeu em 5s');
+// ---- applyCosts com fallback (não bloqueia boot)
+function applyCosts(){
+  const feeBuy = Number($feeBuy?.value ?? 0.10);
+  const feeSell = Number($feeSell?.value ?? 0.10);
+  const spread = Number($spread?.value ?? 0.01);
+  const slippage = Number($slippage?.value ?? 0.05);
+  const vals = [feeBuy, feeSell, spread, slippage].map(v => Number.isFinite(v) && v>=0 ? v : 0);
+  const total = vals.reduce((a,b)=>a+b,0);
+  $totalCost && ($totalCost.textContent = total.toFixed(3)+' %');
+  $breakeven && ($breakeven.textContent = total.toFixed(3)+' %');
+  $breakevenNote && ($breakevenNote.textContent = 'Use ordens limit para reduzir slippage.');
+  logEvent('info',`Custos: total=${total.toFixed(3)}%`);
 }
 
-function tryEndpoint(url, label){
-  return new Promise((resolve) => {
-    let settled = false;
-    let gotMessage = false;
-    try {
-      ws = new WebSocket(url);
-    } catch (e) {
-      setDiagError(`Criar WS (${label}): ${e.message || e}`);
-      logEvent('error', `Falha ao criar WS (${label}): ${e.message || e}`);
-      return resolve(false);
-    }
+// ---- listeners (sem duplicados)
+$apply?.addEventListener('click',applySettings);
+$resetPeakBtn?.addEventListener('click',()=>{ if(lastPrice!=null){ setPeak(lastPrice,'manual'); logEvent('info','Pico resetado manualmente'); } });
+$muteBtn?.addEventListener('click',()=>{ muted=!muted; if($muteBtn) $muteBtn.textContent = muted ? 'Som ativar' : 'Silenciar'; });
 
-    const watchdog = setTimeout(() => {
-      if (!settled && !gotMessage) {
-        settled = true;
-        setDiagError(`Sem dados de ${label} em 5s`);
-        logEvent('warn', `Sem dados de ${label} em 5s. Tentando próximo…`);
-        try { ws.close(); } catch (_) {}
-        resolve(false);
-      }
-    }, 5000);
+$trendWindowSelect?.addEventListener('change',()=>{ const v=parseInt($trendWindowSelect.value,10); if(!isNaN(v)&&v>10&&v<=MAX_BUFFER) trendCfg.window=v; computeAndRenderTrend(); rebuildChart(); });
+$chartType?.addEventListener('change',()=>{ rebuildChart(); });
+$candleTf?.addEventListener('change',()=>{ timeframeSec=tfToSeconds($candleTf.value); resetCandleAggregation(); if(isCandleMode()&&lwChart&&candleSeries) candleSeries.setData([]); });
+$maPreset?.addEventListener('change',()=>{ applyMaPreset($maPreset.value); });
 
-    ws.onopen = () => {
-      setWsStatus('Online');
-      setDiagEvent(`Conectado via ${label}`);
-      logEvent('info', `Conectado via ${label}`);
-      startHeartbeat();
-    };
-
-    ws.onmessage = (ev) => {
-      lastMessageAt = Date.now();
-      gotMessage = true;
-      try {
-        const data = JSON.parse(ev.data);
-        const price = parseFloat(data.p ?? data.price ?? data.c ?? data);
-        if (!isNaN(price)) onPrice(price);
-      } catch (e) {
-        setDiagError(`Payload inválido (${label}): ${e.message || e}`);
-      }
-      updateLatency();
-      const ts = new Date(lastMessageAt).toLocaleTimeString();
-      if ($lastTick) $lastTick.textContent = ts;
-      setDiagLastTick(ts);
-      if (!settled) {
-        settled = true;
-        clearTimeout(watchdog);
-        resolve(true);
-      }
-    };
-
-    ws.onerror = (err) => {
-      setWsStatus('Offline');
-      const msg = `Erro ${label}: ${err?.message || err}`;
-      setDiagError(msg);
-      logEvent('error', msg);
-      if (!settled) {
-        settled = true;
-        clearTimeout(watchdog);
-        resolve(false);
-      }
-    };
-
-    ws.onclose = () => {
-      setWsStatus('Offline');
-      setDiagEvent(`Fechado (${label})`);
-      if (!settled) {
-        settled = true;
-        clearTimeout(watchdog);
-        resolve(false);
-      }
-    };
-  });
-}
-
-// --------- Demo mode ---------
-function enableDemo(reason){
-  if (demoMode) return;
-  demoMode = true;
-  setWsStatus('Demo');
-  setDiagEvent(`Modo DEMO (${reason})`);
-  logEvent('warn', `Modo DEMO ativado (${reason}). Dados simulados serão exibidos.`);
-
-  let t = Date.now();
-  let base = lastPrice || 50000;
-  clearDemo();
-  demoTimer = setInterval(()=>{
-    t = Date.now();
-    base = base + Math.sin(Date.now()/5000) * 10 + (Math.random()-0.5)*5;
-    onPrice(base);
-    const ts = new Date().toLocaleTimeString();
-    if($lastTick) $lastTick.textContent=ts;
-    setDiagLastTick(ts);
-    lastMessageAt = Date.now();
-  }, 1000);
-  startHeartbeat();
-}
-function clearDemo(){
-  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
-}
-
-// --------- Pico / drawdown ---------
-function setDrawdownDisplay(ddSigned){
-  if(!$drawdown) return;
-  const val = ddSigned.toFixed(3);
-  const text = (ddSigned>0?'+':'')+val+' %';
-  $drawdown.textContent = text;
-  $drawdown.style.color = ddSigned>0 ? '#34f5b5' : ddSigned<0 ? '#ff7b9b' : '#e5e7eb';
-}
-function triggerAlert(price,ddAbs){
-  const ts=new Date().toLocaleString();
-  if($lastAlert) $lastAlert.textContent=`${ts} | preço ${formatPrice(price)} | drawdown ${ddAbs.toFixed(3)}%`;
-  if(!muted && beep){ try{beep.currentTime=0; beep.play();}catch(_){} }
-  document.body.classList.add('alert'); setTimeout(()=>document.body.classList.remove('alert'),1000);
-  fetch('/alert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'drawdown-range',message:`Queda ${minPct}%–${maxPct}%`,price,drawdownPct:Number(ddAbs.toFixed(3)),timestamp:Date.now()})}).catch(()=>{});
-}
-function updatePeakAge(){ if(!$peakAge) return; const ms = Date.now()-lastPeakResetAt; $peakAge.textContent = formatDuration(ms); }
-
-function finalizeCurrentPeak(nowTs){
-  if(!currentPeak) return;
-  const ageMs = nowTs - currentPeak.ts;
-  if(ageMs>10000){
-    peaks.unshift({id:nextPeakId++, ts:currentPeak.ts, price:currentPeak.price, origin:currentPeak.origin, maxDdAbs:currentPeak.maxDdAbs||0, durationMs:ageMs, endedAt:nowTs});
-    renderPeaks();
-  }
-}
-function setPeak(price,origin){
-  const now=Date.now();
-  finalizeCurrentPeak(now);
-  currentPeak = { ts: now, price, origin, maxDdAbs: 0 };
-  peakPrice = price; lastPeakResetAt = now;
-  if($peak) $peak.textContent = formatPrice(peakPrice);
-  updatePeakAge();
-}
-function onPrice(price){
-  lastPrice = price; if($price) $price.textContent = formatPrice(price);
-
-  pushPrice(price);
-  updateChart();
-
-  if(Date.now()-lastPeakResetAt > resetMinutes*60*1000){ setPeak(price,'auto'); logEvent('info','Pico resetado por janela'); }
-  if(peakPrice===null || price>peakPrice){ setPeak(price,'new-top'); }
-
-  let ddAbs=0, ddSigned=0;
-  if(peakPrice){ ddAbs=((peakPrice-price)/peakPrice)*100; ddSigned=((price-peakPrice)/peakPrice)*100; }
-  setDrawdownDisplay(ddSigned);
-  if(currentPeak) currentPeak.maxDdAbs = Math.max(currentPeak.maxDdAbs||0, ddAbs||0);
-  if(ddAbs>=minPct && ddAbs<=maxPct) triggerAlert(price,ddAbs);
-
-  computeAndRenderTrend();
-}
-
-// --------- Buffer ---------
-function pushPrice(price){
-  priceBuffer.push(price);
-  timeLabels.push(new Date().toLocaleTimeString());
-  if(priceBuffer.length>MAX_BUFFER) priceBuffer = priceBuffer.slice(priceBuffer.length - MAX_BUFFER);
-  if(timeLabels.length>MAX_BUFFER) timeLabels = timeLabels.slice(timeLabels.length - MAX_BUFFER);
-}
-
-// --------- Tendência (regressão linear) ---------
-function computeLinearSlope(values){
-  const n = values.length;
-  if (n < 2) return 0;
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-  for (let i = 0; i < n; i++) { const x = i, y = values[i]; sumX += x; sumY += y; sumXY += x * y; sumXX += x * x; }
-  const denom = (n * sumXX - sumX * sumX);
-  if (denom === 0) return 0;
-  return (n * sumXY - sumX * sumY) / denom;
-}
-function computeAndRenderTrend(){
-  const N = trendCfg.window;
-  if ($trendWindowInfo) $trendWindowInfo.textContent = `Janela: ${N}`;
-  const series = priceBuffer.slice(Math.max(0, priceBuffer.length - N));
-  if (series.length < 2) {
-    if ($trendLabel) $trendLabel.textContent = 'Neutra';
-    $trendLabel?.classList.remove('up','down');
-    if ($trendScore) $trendScore.textContent = '0.0000';
-    return;
-  }
-  const slope = computeLinearSlope(series);
-  const base = series[0];
-  const pctPerSample = base ? (slope / base) : 0;
-  const thr = trendCfg.threshold;
-
-  let label = 'Neutra', cls = '';
-  if (pctPerSample > thr) { label = 'Alta ⬆'; cls = 'up'; }
-  else if (pctPerSample < -thr) { label = 'Baixa ⬇'; cls = 'down'; }
-
-  if ($trendLabel) {
-    $trendLabel.textContent = label;
-    $trendLabel.classList.remove('up','down');
-    if (cls) $trendLabel.classList.add(cls);
-  }
-  if ($trendScore) $trendScore.textContent = pctPerSample.toFixed(4);
-}
-
-// --------- Tabela de picos ---------
-function renderPeaks(){
-  if(!$peaksBody) return;
-  $peaksBody.innerHTML='';
-  for(const p of peaks){
-    const tr=document.createElement('tr');
-
-    const tdDate=document.createElement('td');
-    tdDate.classList.add('editable'); tdDate.contentEditable='true'; tdDate.dataset.field='ts'; tdDate.dataset.id=p.id;
-    tdDate.textContent=new Date(p.ts).toLocaleString();
-
-    const tdPrice=document.createElement('td');
-    tdPrice.classList.add('editable'); tdPrice.contentEditable='true'; tdPrice.dataset.field='price'; tdPrice.dataset.id=p.id;
-    tdPrice.textContent=p.price.toFixed(2);
-
-    const tdAge=document.createElement('td');
-    tdAge.dataset.fixed='true'; tdAge.textContent = formatDuration(p.durationMs || (p.endedAt ? (p.endedAt - p.ts) : 0));
-
-    const tdDd=document.createElement('td'); tdDd.textContent=(p.maxDdAbs||0).toFixed(3)+' %';
-
-    const tdOrigin=document.createElement('td');
-    tdOrigin.classList.add('editable'); tdOrigin.contentEditable='true'; tdOrigin.dataset.field='origin'; tdOrigin.dataset.id=p.id;
-    tdOrigin.textContent=formatOrigin(p.origin);
-
-    tr.append(tdDate,tdPrice,tdAge,tdDd,tdOrigin);
-    $peaksBody.appendChild(tr);
-  }
-}
-function formatOrigin(o){ switch(o){ case 'manual': return 'Manual'; case 'auto': return 'Auto'; case 'new-top': return 'Novo topo'; default: return o; } }
-function parseOrigin(t){ const x=(t||'').trim().toLowerCase(); if(['manual','auto','novo topo','new-top'].includes(x)) return x==='novo topo'?'new-top':x; return 'manual'; }
-
-// --------- Export/Clear/Save ---------
 $exportPeaks?.addEventListener('click',()=>{
   const rows=[['Data/Hora','Preço','Duração (s)','DD máx (%)','Origem']];
   peaks.forEach(p=>{
@@ -484,18 +65,12 @@ $clearPeaks?.addEventListener('click',()=>{peaks=[]; renderPeaks(); logEvent('wa
 $savePeaks?.addEventListener('click',()=>{
   if(!$peaksBody) return;
   const edits=$peaksBody.querySelectorAll('td.editable'); const updates=new Map(); let ok=true;
-  edits.forEach(td=>{
-    const id=parseInt(td.dataset.id,10);
-    const field=td.dataset.field;
-    const value=td.textContent.trim();
-    if(!updates.has(id)) updates.set(id,{});
-    updates.get(id)[field]=value;
-  });
+  edits.forEach(td=>{ const id=parseInt(td.dataset.id,10); const field=td.dataset.field; const value=td.textContent.trim(); if(!updates.has(id)) updates.set(id,{}); updates.get(id)[field]=value; });
   peaks=peaks.map(p=>{
     if(updates.has(p.id)){
       const u=updates.get(p.id); const c={...p};
-      if(u.ts){const parsed=Date.parse(u.ts); if(!isNaN(parsed)){c.ts=parsed; c.durationMs=(c.endedAt||c.ts)-c.ts;} else {ok=false; logEvent('error',`Data/Hora inválida id=${p.id}`);}}
-      if(u.price){const n=parseFloat(u.price.replace(',','.')); if(!isNaN(n)&&n>0){c.price=n;} else {ok=false; logEvent('error',`Preço inválido id=${p.id}`);}}
+      if(u.ts){ const parsed=Date.parse(u.ts); if(!isNaN(parsed)){ c.ts=parsed; c.durationMs=(c.endedAt||c.ts)-c.ts; } else { ok=false; logEvent('error',`Data/Hora inválida id=${p.id}`); } }
+      if(u.price){ const n=parseFloat(u.price.replace(',','.')); if(!isNaN(n)&&n>0){ c.price=n; } else { ok=false; logEvent('error',`Preço inválido id=${p.id}`); } }
       if(u.origin) c.origin=parseOrigin(u.origin);
       return c;
     }
@@ -504,64 +79,13 @@ $savePeaks?.addEventListener('click',()=>{
   if(ok){ renderPeaks(); logEvent('info','Edições salvas'); }
 });
 
-// --------- Settings / custos ---------
-function applySettings(){
-  minPct=parseFloat($minThreshold?.value);
-  maxPct=parseFloat($maxThreshold?.value);
-  resetMinutes=parseInt($resetWindow?.value,10);
-  symbol=($symbolInput?.value||'btcusdt').toLowerCase();
-
-  if(isNaN(minPct)||isNaN(maxPct)||minPct<=0||maxPct<=0||minPct>maxPct){logEvent('error','Thresholds inválidos'); return;}
-  if(!/^[a-z0-9]+$/.test(symbol)){logEvent('error','Símbolo inválido'); return;}
-
-  logEvent('info',`Aplicado: ${symbol}, min=${minPct}%, max=${maxPct}%, reset=${resetMinutes}min`);
-  connect();
-}
-function resetPeak(){ if(lastPrice!=null){ setPeak(lastPrice,'manual'); logEvent('info','Pico resetado manualmente'); } }
-function toggleMute(){ muted=!muted; if($muteBtn) $muteBtn.textContent = muted ? 'Som ativar' : 'Silenciar'; }
-
-let cost={feeBuy:0.10,feeSell:0.10,spread:0.01,slippage:0.05};
-function applyCosts(){
-  cost.feeBuy=parseFloat($feeBuy?.value);
-  cost.feeSell=parseFloat($feeSell?.value);
-  cost.spread=parseFloat($spread?.value);
-  cost.slippage=parseFloat($slippage?.value);
-  for(const k of Object.keys(cost)){ if(isNaN(cost[k])||cost[k]<0){logEvent('error',`Valor inválido em ${k}`); return;} }
-  const total=cost.feeBuy+cost.feeSell+cost.spread+cost.slippage;
-  if($totalCost) $totalCost.textContent=total.toFixed(3)+' %';
-  if($breakeven) $breakeven.textContent=total.toFixed(3)+' %';
-  if($breakevenNote) $breakevenNote.textContent='Use ordens limit para reduzir slippage.';
-  logEvent('info',`Custos: total=${total.toFixed(3)}%`);
-}
-
-// --------- Listeners ---------
-setInterval(()=>{ updatePeakAge(); },1000);
-
-$apply?.addEventListener('click',applySettings);
-$resetPeakBtn?.addEventListener('click',resetPeak);
-$muteBtn?.addEventListener('click',toggleMute);
-$applyCosts?.addEventListener('click',applyCosts);
-
-$chartType?.addEventListener('change', () => { rebuildChart(); });
-$trendWindowSelect?.addEventListener('change', () => {
-  const v = parseInt($trendWindowSelect.value, 10);
-  if (!isNaN(v) && v > 10 && v <= MAX_BUFFER) trendCfg.window = v;
-  computeAndRenderTrend();
-  rebuildChart();
-});
-
-// --------- Init ---------
-initChart();
-applySettings(); // tenta Binance; se falhar, tenta proxy; senão DEMO
+// ---- boot
+initChartsOnLoad();
+applySettings();        // agora sempre conecta, mesmo sem inputs
 applyCosts();
 computeAndRenderTrend();
 updatePeakAge();
 renderPeaks();
+setTimeout(()=>{ if(!lastMessageAt && !demoMode){ setDiagError('Sem dados nos primeiros 5s'); enableDemo('Sem dados do WS nos primeiros 5s'); } },5000);
 
-// Watchdog: se em 5s não chegar nada, garante DEMO
-setTimeout(() => {
-  if (!lastMessageAt && !demoMode) {
-    setDiagError('Sem dados nos primeiros 5s');
-    enableDemo('Sem dados do WS nos primeiros 5s');
-  }
-}, 5000);
+// [restante do arquivo igual ao seu (conexão, candle, trend, etc.)]

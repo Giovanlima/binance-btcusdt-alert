@@ -85,21 +85,48 @@
             <h3>Preço – Últimos ticks</h3>
             <div class="chart-controls">
               <label class="muted" data-tip="Tipo de gráfico.">Tipo</label>
-              <select id="chartType" data-tip="Trocar entre Linha, Área e Barra.">
+              <select id="chartType" data-tip="Trocar entre Linha, Área, Barra e Candle.">
                 <option value="line" selected>Linha</option>
                 <option value="area">Área</option>
                 <option value="bar">Barra</option>
+                <option value="candle">Candle</option>
               </select>
+
+              <label class="muted" data-tip="Médias móveis sobre o gráfico.">Médias</label>
+              <select id="maPreset" data-tip="Presets: desligado, EMA20, EMA20/50, EMA20/50/200, SMA20/50/200">
+                <option value="off">Desligadas</option>
+                <option value="ema20">EMA 20</option>
+                <option value="ema2050" selected>EMA 20/50</option>
+                <option value="ema2050200">EMA 20/50/200</option>
+                <option value="sma2050200">SMA 20/50/200</option>
+              </select>
+
               <label class="muted" data-tip="Janela de ticks usada no gráfico e tendência.">Tempo gráfico</label>
-              <select id="trendWindow" data-tip="Quantidade de pontos para análise e exibição.">
+              <select id="trendWindow" data-tip="Quantidade de pontos (ticks) para análise e exibição.">
                 <option value="60" selected>60</option>
                 <option value="120">120</option>
                 <option value="240">240</option>
+              </select>
+
+              <label class="muted" data-tip="Intervalo das velas (apenas no modo Candle).">Candle TF</label>
+              <select id="candleTf" data-tip="Intervalo de agregação das velas no modo Candle.">
+                <option value="1s">1s</option><option value="2s">2s</option><option value="3s">3s</option><option value="4s">4s</option>
+                <option value="5s" selected>5s</option><option value="10s">10s</option><option value="15s">15s</option><option value="20s">20s</option><option value="30s">30s</option>
+                <option value="1m">1min</option><option value="2m">2min</option><option value="3m">3min</option><option value="4m">4min</option><option value="5m">5min</option>
+                <option value="10m">10min</option><option value="15m">15min</option><option value="30m">30min</option>
+                <option value="1h">1h</option><option value="2h">2h</option><option value="3h">3h</option><option value="4h">4h</option><option value="5h">5h</option>
+                <option value="6h">6h</option><option value="7h">7h</option><option value="8h">8h</option><option value="9h">9h</option><option value="10h">10h</option>
+                <option value="12h">12h</option><option value="14h">14h</option><option value="18h">18h</option>
+                <option value="1d">1d</option><option value="2d">2d</option><option value="3d">3d</option><option value="4d">4d</option><option value="5d">5d</option>
+                <option value="10d">10d</option><option value="15d">15d</option>
+                <option value="1w">1sem</option><option value="2w">2sem</option>
+                <option value="1mo">1mes</option><option value="6mo">6meses</option><option value="1y">1ano</option>
               </select>
             </div>
           </div>
           <div class="chart-area">
             <canvas id="priceChart"></canvas>
+            <div id="candleContainer" aria-hidden="true"></div>
           </div>
           <div class="panel-foot"><span class="muted">Atualiza em tempo real</span></div>
         </div>
@@ -114,36 +141,23 @@
         </div>
       </section>
 
+      <!-- Reposto: Data input -->
       <section class="grid-2">
-        <div class="card" data-tip="Configuração dos alertas.">
+        <div class="card" data-tip="Configuração dos alertas e símbolo.">
           <div class="panel-head"><h3>Data input</h3></div>
           <div class="form-grid">
-            <label data-tip="Mínimo do intervalo de drawdown absoluto para alertar.">Mín (%)<input id="minThreshold" type="number" step="0.1" value="2.5" /></label>
-            <label data-tip="Máximo do intervalo de drawdown absoluto para alertar.">Máx (%)<input id="maxThreshold" type="number" step="0.1" value="3" /></label>
-            <label data-tip="Tempo para reset automático do pico.">Reset (min)<input id="resetWindow" type="number" step="1" value="60" /></label>
-            <label data-tip="Par da Binance (minúsculas).">Símbolo<input id="symbol" type="text" value="btcusdt" /></label>
+            <label>Mín (%)<input id="minThreshold" type="number" step="0.1" value="2.5" /></label>
+            <label>Máx (%)<input id="maxThreshold" type="number" step="0.1" value="3" /></label>
+            <label>Reset (min)<input id="resetWindow" type="number" step="1" value="60" /></label>
+            <label>Símbolo<input id="symbol" type="text" value="btcusdt" /></label>
             <div class="form-actions">
-              <button id="apply" class="btn" data-tip="Aplicar símbolo e thresholds.">Aplicar</button>
-              <button id="resetPeak" class="btn btn-soft" data-tip="Reset manual do pico para o preço atual.">Resetar Pico</button>
-              <button id="mute" class="btn btn-soft" data-tip="Ativar/desativar som dos alertas.">Silenciar</button>
+              <button id="apply" class="btn">Aplicar</button>
+              <button id="resetPeak" class="btn btn-soft">Resetar Pico</button>
+              <button id="mute" class="btn btn-soft">Silenciar</button>
             </div>
           </div>
         </div>
 
-        <div class="card" data-tip="Tendência por regressão linear dos últimos N preços.">
-          <div class="panel-head"><h3>Tendência</h3></div>
-          <div class="trend-block">
-            <div class="trend-line">
-              <span id="trendLabel" class="trend-label" data-tip="Alta ⬆ quando inclinação > threshold; Baixa ⬇ quando < -threshold; caso contrário Neutra.">Neutra</span>
-              <small id="trendScore" class="muted" data-tip="Score = inclinação normalizada em % por amostra.">0.0000</small>
-            </div>
-            <small class="muted" id="trendWindowInfo" data-tip="Tempo gráfico atual (N pontos).">Janela: 60</small>
-          </div>
-        </div>
-      </section>
-
-      <!-- Diagnóstico -->
-      <section class="grid-2">
         <div class="card" data-tip="Diagnóstico de conexão e erros.">
           <div class="panel-head"><h3>Diagnóstico</h3></div>
           <div class="results">
@@ -155,36 +169,22 @@
             <div class="res-row"><span class="muted">Último tick</span><strong id="diagLastTick">-</strong></div>
           </div>
         </div>
-
-        <div class="card" data-tip="Resultados calculados a partir dos custos.">
-          <div class="panel-head"><h3>Resultados</h3></div>
-          <div class="results">
-            <div class="res-row"><span class="muted">Custo total</span><strong id="totalCost">-</strong></div>
-            <div class="res-row"><span class="muted">Breakeven</span><strong id="breakeven">-</strong></div>
-            <div class="res-row"><span class="muted">Obs</span><span id="breakevenNote" class="muted" data-tip="Use ordens limit para reduzir slippage.">Use ordens limit para reduzir slippage.</span></div>
-          </div>
-        </div>
       </section>
 
       <section class="card" data-tip="Somente picos finalizados com duração > 10s são registrados.">
         <div class="panel-head">
           <h3>Picos recentes</h3>
           <div class="actions">
-            <!-- IDs necessários pelo app.js -->
-            <button id="exportPeaks" class="btn-soft" data-tip="Exportar histórico em CSV.">Exportar CSV</button>
-            <button id="savePeaks" class="btn-soft" data-tip="Salvar edições na tabela.">Salvar edições</button>
-            <button id="clearPeaks" class="btn-soft" data-tip="Limpar histórico.">Limpar</button>
+            <button id="exportPeaks" class="btn-soft">Exportar CSV</button>
+            <button id="savePeaks" class="btn-soft">Salvar edições</button>
+            <button id="clearPeaks" class="btn-soft">Limpar</button>
           </div>
         </div>
         <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
-                <th data-tip="Horário de registro do pico.">Data/Hora</th>
-                <th data-tip="Preço do pico.">Preço</th>
-                <th data-tip="Tempo total (Duração) do pico.">Duração</th>
-                <th data-tip="Maior drawdown observado desde o pico.">DD máx</th>
-                <th data-tip="Origem do pico (manual/auto/novo topo).">Origem</th>
+                <th>Data/Hora</th><th>Preço</th><th>Duração</th><th>DD máx</th><th>Origem</th>
               </tr>
             </thead>
             <tbody id="peaksBody"></tbody>
@@ -193,14 +193,14 @@
         <small class="muted">Registra apenas picos finalizados com duração > 10s.</small>
       </section>
 
-      <footer class="footer muted" data-tip="Aviso legal.">Informativo. Não executa ordens.</footer>
+      <footer class="footer muted">Informativo. Não executa ordens.</footer>
     </main>
   </div>
 
   <audio id="beep" src="data:audio/wav;base64,UklGRoQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=" preload="auto"></audio>
 
-  <!-- Chart.js CDN ANTES do app.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
