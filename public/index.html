@@ -47,32 +47,32 @@
       </header>
 
       <section class="status-line card">
-        <div class="status-item" data-tip="Estado da conexão com a Binance.">
+        <div class="status-item">
           <span class="label">Conexão</span>
           <span id="wsStatus" class="badge">Offline</span>
         </div>
-        <div class="status-item" data-tip="Latência estimada da atualização.">
+        <div class="status-item">
           <span class="label">Latência</span>
           <span><strong id="latency">-</strong> ms</span>
         </div>
-        <div class="status-item" data-tip="Horário do último tick recebido.">
+        <div class="status-item">
           <span class="label">Último tick</span>
           <span><strong id="lastTick">-</strong></span>
         </div>
       </section>
 
       <section class="kpi-row">
-        <div class="kpi card kpi-green" data-tip="Preço negociado em tempo real (aggTrade).">
+        <div class="kpi card kpi-green">
           <div class="kpi-head"><span class="muted">Preço atual</span></div>
           <div id="price" class="kpi-val">-</div>
           <div class="kpi-foot"><span class="chip chip-up">live</span></div>
         </div>
-        <div class="kpi card kpi-blue" data-tip="Maior preço desde o último reset/novo topo.">
+        <div class="kpi card kpi-blue">
           <div class="kpi-head"><span class="muted">Pico recente</span></div>
           <div class="kpi-val"><span id="peak">-</span></div>
           <div class="kpi-foot"><span class="muted">há <strong id="peakAge">—</strong></span></div>
         </div>
-        <div class="kpi card kpi-violet" data-tip="Variação com sinal vs. Pico: verde acima, vermelho abaixo.">
+        <div class="kpi card kpi-violet">
           <div class="kpi-head"><span class="muted">Drawdown</span></div>
           <div id="drawdown" class="kpi-val">-</div>
           <div class="kpi-foot"><span class="muted">vs. pico</span></div>
@@ -80,20 +80,20 @@
       </section>
 
       <section class="middle">
-        <div class="panel card" data-tip="Gráfico dos últimos ticks.">
+        <div class="panel card">
           <div class="panel-head">
             <h3>Preço – Últimos ticks</h3>
             <div class="chart-controls">
-              <label class="muted" data-tip="Tipo de gráfico.">Tipo</label>
-              <select id="chartType" data-tip="Trocar entre Linha, Área, Barra e Candle.">
+              <label class="muted">Tipo</label>
+              <select id="chartType">
                 <option value="line" selected>Linha</option>
                 <option value="area">Área</option>
                 <option value="bar">Barra</option>
                 <option value="candle">Candle</option>
               </select>
 
-              <label class="muted" data-tip="Médias móveis sobre o gráfico.">Médias</label>
-              <select id="maPreset" data-tip="Presets: desligado, EMA20, EMA20/50, EMA20/50/200, SMA20/50/200">
+              <label class="muted">Médias</label>
+              <select id="maPreset">
                 <option value="off">Desligadas</option>
                 <option value="ema20">EMA 20</option>
                 <option value="ema2050" selected>EMA 20/50</option>
@@ -101,15 +101,15 @@
                 <option value="sma2050200">SMA 20/50/200</option>
               </select>
 
-              <label class="muted" data-tip="Janela de ticks usada no gráfico e tendência.">Tempo gráfico</label>
-              <select id="trendWindow" data-tip="Quantidade de pontos (ticks) para análise e exibição.">
+              <label class="muted">Tempo gráfico</label>
+              <select id="trendWindow">
                 <option value="60" selected>60</option>
                 <option value="120">120</option>
                 <option value="240">240</option>
               </select>
 
-              <label class="muted" data-tip="Intervalo das velas (apenas no modo Candle).">Candle TF</label>
-              <select id="candleTf" data-tip="Intervalo de agregação das velas no modo Candle.">
+              <label class="muted">Candle TF</label>
+              <select id="candleTf">
                 <option value="1s">1s</option><option value="2s">2s</option><option value="3s">3s</option><option value="4s">4s</option>
                 <option value="5s" selected>5s</option><option value="10s">10s</option><option value="15s">15s</option><option value="20s">20s</option><option value="30s">30s</option>
                 <option value="1m">1min</option><option value="2m">2min</option><option value="3m">3min</option><option value="4m">4min</option><option value="5m">5min</option>
@@ -131,7 +131,7 @@
           <div class="panel-foot"><span class="muted">Atualiza em tempo real</span></div>
         </div>
 
-        <div class="panel card" data-tip="Eventos e atividades recentes.">
+        <div class="panel card">
           <div class="panel-head"><h3>Recent Activity</h3></div>
           <ul class="activity">
             <li><span class="ico-bullet">⬤</span>Conexão de stream inicializada</li>
@@ -141,14 +141,13 @@
         </div>
       </section>
 
-      <!-- Reposto: Data input -->
       <section class="grid-2">
-        <div class="card" data-tip="Configuração dos alertas e símbolo.">
+        <div class="card">
           <div class="panel-head"><h3>Data input</h3></div>
           <div class="form-grid">
-            <label>Mín (%)<input id="minThreshold" type="number" step="0.1" value="2.5" /></label>
-            <label>Máx (%)<input id="maxThreshold" type="number" step="0.1" value="3" /></label>
-            <label>Reset (min)<input id="resetWindow" type="number" step="1" value="60" /></label>
+            <label>Mín (%)<input id="minThreshold" type="text" value="2,5" /></label>
+            <label>Máx (%)<input id="maxThreshold" type="text" value="3" /></label>
+            <label>Reset (min)<input id="resetWindow" type="text" value="60" /></label>
             <label>Símbolo<input id="symbol" type="text" value="btcusdt" /></label>
             <div class="form-actions">
               <button id="apply" class="btn">Aplicar</button>
@@ -158,7 +157,7 @@
           </div>
         </div>
 
-        <div class="card" data-tip="Diagnóstico de conexão e erros.">
+        <div class="card">
           <div class="panel-head"><h3>Diagnóstico</h3></div>
           <div class="results">
             <div class="res-row"><span class="muted">Endpoint</span><strong id="diagEndpoint">-</strong></div>
@@ -171,7 +170,7 @@
         </div>
       </section>
 
-      <section class="card" data-tip="Somente picos finalizados com duração > 10s são registrados.">
+      <section class="card">
         <div class="panel-head">
           <h3>Picos recentes</h3>
           <div class="actions">
